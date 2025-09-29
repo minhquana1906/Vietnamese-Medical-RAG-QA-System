@@ -8,7 +8,7 @@ def test_complete_request_basic():
     request = CompleteRequest(user_message="Hello doctor")
 
     assert request.user_message == "Hello doctor"
-    assert request.bot_id == "medical_rag_bot"
+    assert request.bot_id == "Meddy"
     assert request.user_id == "user_1"
     assert request.is_sync_request is False
 
