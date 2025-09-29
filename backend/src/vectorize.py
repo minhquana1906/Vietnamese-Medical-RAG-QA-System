@@ -14,15 +14,21 @@ def get_qdrant_client(host="qdrant_db", port=6333):
         raise
 
 
-def create_collection(collection_name=DEFAULT_COLLECTION_NAME, vector_dimension=VECTOR_DIMENSION):
+def create_collection(
+    collection_name=DEFAULT_COLLECTION_NAME, vector_dimension=VECTOR_DIMENSION
+):
     try:
         client = get_qdrant_client()
-        existing_collections = [col.name for col in client.get_collections().collections]
+        existing_collections = [
+            col.name for col in client.get_collections().collections
+        ]
 
         if collection_name not in existing_collections:
             client.recreate_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=vector_dimension, distance=Distance.COSINE),
+                vectors_config=VectorParams(
+                    size=vector_dimension, distance=Distance.COSINE
+                ),
             )
             status = f"Collection {collection_name} created with vector dimensions {vector_dimension} successfully"
             logger.info(status)
@@ -48,7 +54,9 @@ def upsert_points(points, collection_name=DEFAULT_COLLECTION_NAME):
             for i, point in enumerate(points)
         ]
         results = client.upsert(collection_name=collection_name, points=point_structs)
-        logger.info(f"Upserted {len(points)} points to collection {collection_name} successfully")
+        logger.info(
+            f"Upserted {len(points)} points to collection {collection_name} successfully"
+        )
         return results
     except Exception as e:
         logger.error(f"Error upserting points: {e}")
@@ -72,7 +80,9 @@ def search_vectors(query_vector, top_k=TOP_K, collection_name=DEFAULT_COLLECTION
             }
             for point in search_result
         ]
-        logger.info(f"Search in collection {collection_name} returned {len(results)} results")
+        logger.info(
+            f"Search in collection {collection_name} returned {len(results)} results"
+        )
         return results
     except Exception as e:
         logger.error(f"Error searching vectors: {e}")

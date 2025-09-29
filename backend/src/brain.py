@@ -34,7 +34,9 @@ def openai_generate_embedding(text, model=EMBEDDING_MODEL):
         raise
 
 
-def openai_chat_complete(messages, model=LLM, temperature=TEMPERATURE, max_tokens=MAX_TOKENS):
+def openai_chat_complete(
+    messages, model=LLM, temperature=TEMPERATURE, max_tokens=MAX_TOKENS
+):
     try:
         client = get_openai_client()
         response = client.chat.completions.create(
@@ -55,8 +57,7 @@ def format_context(docs):
     try:
         context = ""
         for i, doc in enumerate(docs):
-            context += f"Đoạn văn bản {i + 1}:\nTiêu đề: {doc['title']}\nNội dung: {doc['content']}\n\n"
-        logger.info(f"Generated context document prompt {context}")
+            context += f"Đoạn văn bản {i + 1} (Điểm tin cậy: {doc['score']}):\nTiêu đề: {doc['title']}\nNội dung: {doc['content']}\n\n"
         return context
     except Exception as e:
         logger.error(f"Error structuring context: {e}")
