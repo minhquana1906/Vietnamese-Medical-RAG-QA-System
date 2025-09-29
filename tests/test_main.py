@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 def test_root_endpoint(client):
@@ -53,12 +53,22 @@ class TestCollectionEndpoints:
 class TestDocumentEndpoints:
     @patch("backend.src.main.chunk_and_index_document")
     @patch("backend.src.main.insert_document")
-    def test_insert_document(self, mock_insert, mock_chunk, client):
+    def test_insert_document(self, mock_insert, mock_chunk_and_index, client):
+        # Mock the insert_document function to return a mock document
         mock_doc = type("Document", (), {"id": 123})()
         mock_insert.return_value = mock_doc
 
-        response = client.post("/documents/create", params={"title": "Test Doc", "content": "Test content"})
+        # Mock the chunk_and_index_document function to simulate a successful response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_chunk_and_index.return_value = mock_response
 
+        # Make the POST request with query parameters
+        response = client.post(
+            "/documents/create", params={"title": "Test Doc", "content": "Test content"}
+        )
+
+        # Assertions
         assert response.status_code == 200
         assert response.json()["document_id"] == "123"
         assert "indexing started" in response.json()["status"]
