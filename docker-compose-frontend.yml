@@ -1,0 +1,17 @@
+services:
+  chatbot_ui:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: chatbot_ui
+    restart: always
+    ports:
+      - "8501:8501"
+    expose:
+      - 8501
+    networks:
+      - medical_rag_qa_network
+
+networks:
+  medical_rag_qa_network:
+    driver: bridge
