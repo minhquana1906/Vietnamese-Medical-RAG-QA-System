@@ -4,6 +4,12 @@ install: ## Install the virtual environment and install the pre-commit hooks
 	@uv sync
 	@uv run pre-commit install
 
+# Custom make commands
+.PHONY: sync
+sync: ## Sync the virtual environment with pyproject.toml
+	@echo "🚀 Syncing the virtual environment with pyproject.toml"
+	@uv sync --group backend --group frontend --group dev
+
 .PHONY: check
 check: ## Run code quality tools.
 	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
