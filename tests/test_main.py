@@ -53,11 +53,13 @@ class TestCollectionEndpoints:
 class TestDocumentEndpoints:
     @patch("backend.src.main.chunk_and_index_document")
     @patch("backend.src.main.insert_document")
-    def test_insert_document(self, mock_insert, mock_chunk, client):
+    def test_insert_document(self, mock_insert, client):
         mock_doc = type("Document", (), {"id": 123})()
         mock_insert.return_value = mock_doc
 
-        response = client.post("/documents/create", params={"title": "Test Doc", "content": "Test content"})
+        response = client.post(
+            "/documents/create", json={"title": "Test Doc", "content": "Test content"}
+        )
 
         assert response.status_code == 200
         assert response.json()["document_id"] == "123"
