@@ -1,7 +1,8 @@
 import os
 import sys
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
