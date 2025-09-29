@@ -57,7 +57,7 @@ async def chat_complete(request: CompleteRequest):
 
     try:
         if is_sync_request:
-            response = message_handler_task(user_id, bot_id, user_message)
+            response = message_handler_task(bot_id, user_id, user_message)
             return {"status": "completed", "response": response}
         else:
             response = message_handler_task.delay(bot_id, user_id, user_message)
