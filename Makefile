@@ -1,36 +1,57 @@
-.PHONY: install
-install: ## Install the virtual environment and install the pre-commit hooks
+.PHONY: install sync check test test-cov build clean-build help
+
+install: ## Install virtual environment and pre-commit hooks
 	@echo "🚀 Creating virtual environment using uv"
-	@uv sync
+	@uv sync --all-groups
 	@uv run pre-commit install
+	@echo "✅ Setup complete!"
 
-.PHONY: check
-check: ## Run code quality tools.
-	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
-	@uv lock --locked
-	@echo "🚀 Linting code: Running pre-commit"
-	@uv run pre-commit run -a
-	@echo "🚀 Static type checking: Running mypy"
-	@uv run mypy
+sync: ## Sync virtual environment with pyproject.toml
+	@echo "🚀 Syncing virtual environment"
+	@uv sync --all-groups
 
-.PHONY: test
-test: ## Test the code with pytest
-	@echo "🚀 Testing code: Running pytest"
-	@uv run python -m pytest --doctest-modules
+check: ## Run code quality checks
+	@echo "🚀 Running code quality checks"
+	@uv run pre-commit run --all-files
+	@uv run mypy backend/src
 
-.PHONY: build
+test: ## Run tests
+	@echo "🧪 Running tests"
+	@uv run pytest tests/ -v
+
+test-cov: ## Run tests with coverage
+	@echo "🧪 Running tests with coverage"
+	@uv run pytest tests/ -v --cov=backend/src --cov-report=term-missing --cov-report=html
+
+test-unit: ## Run only unit tests
+	@echo "🧪 Running unit tests"
+	@uv run pytest tests/test_*.py -v
+
+test-integration: ## Run only integration tests
+	@echo "🧪 Running integration tests"
+	@uv run pytest tests/integration/ -v -m integration
+
 build: clean-build ## Build wheel file
-	@echo "🚀 Creating wheel file"
-	@uvx --from build pyproject-build --installer uv
+	@echo "🚀 Building package"
+	@uv build
 
-.PHONY: clean-build
 clean-build: ## Clean build artifacts
-	@echo "🚀 Removing build artifacts"
-	@uv run python -c "import shutil; import os; shutil.rmtree('dist') if os.path.exists('dist') else None"
+	@echo "🧹 Cleaning build artifacts"
+	@rm -rf dist/ build/ *.egg-info/ htmlcov/ .coverage
+	@find . -type d -name __pycache__ -delete
+	@find . -type f -name "*.pyc" -delete
 
-.PHONY: help
-help:
-	@uv run python -c "import re; \
-	[[print(f'\033[36m{m[0]:<20}\033[0m {m[1]}') for m in re.findall(r'^([a-zA-Z_-]+):.*?## (.*)$$', open(makefile).read(), re.M)] for makefile in ('$(MAKEFILE_LIST)').strip().split()]"
+dev: ## Run development server
+	@echo "🚀 Starting development server"
+	@uv run uvicorn backend.src.main:app --reload --host 0.0.0.0 --port 8000
+
+format: ## Format code
+	@echo "✨ Formatting code"
+	@uv run ruff format backend/ tests/
+	@uv run ruff check backend/ tests/ --fix
+
+help: ## Show help
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help
