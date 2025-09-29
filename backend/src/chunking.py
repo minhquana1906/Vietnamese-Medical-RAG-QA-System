@@ -1,6 +1,7 @@
 import json
 
-from llama_index.core.node_parser import SentenceSplitter, SentenceWindowNodeParser
+from llama_index.core.node_parser import (SentenceSplitter,
+                                          SentenceWindowNodeParser)
 from llama_index.core.schema import Document, TextNode
 from loguru import logger
 

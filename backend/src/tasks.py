@@ -3,13 +3,11 @@ import uuid
 from celery import shared_task
 from loguru import logger
 
-from .brain import (
-    format_context,
-    openai_chat_complete,
-    openai_generate_embedding,
-)
+from .brain import (format_context, openai_chat_complete,
+                    openai_generate_embedding)
 from .chunking import dynamic_chunking
-from .config import DEFAULT_COLLECTION_NAME, EMBEDDING_MODEL, SYSTEM_PROMPT, TOP_K
+from .config import (DEFAULT_COLLECTION_NAME, EMBEDDING_MODEL, SYSTEM_PROMPT,
+                     TOP_K)
 from .database import get_celery_app
 from .models import get_messages_from_conversation, update_conversation
 from .summarizer import get_summarized_content

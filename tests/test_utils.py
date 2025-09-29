@@ -25,6 +25,7 @@ class TestUtilityFunctions:
 
     def test_setup_logger(self):
         from unittest.mock import patch
+
         from backend.src.utils import setup_logger
 
         with patch("backend.src.utils.logger") as mock_logger:
