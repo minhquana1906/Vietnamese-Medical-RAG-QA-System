@@ -21,7 +21,7 @@ if TESTING:
     logger.info("Using test database configuration")
 else:
     # Production PostgreSQL setup
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "posgres_admin")
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres_admin")
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres_admin")
     POSTGRES_DB = os.getenv("POSTGRES_DB", "demo_bot")
     POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres_db")
@@ -32,13 +32,12 @@ else:
     try:
         engine = create_engine(DATABASE_URL, pool_pre_ping=True)
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
         logger.info("Database connection established successfully.")
     except OperationalError as e:
         logger.error(f"Database connection error: {e}")
         raise
+
+
 @contextmanager
 def get_db():
     db = SessionLocal()
@@ -56,7 +55,9 @@ def get_celery_app(name):
     broker_url = os.getenv("CELERY_BROKER_URL")
     result_backend = os.getenv("CELERY_RESULT_BACKEND")
     if not broker_url or not result_backend:
-        raise ValueError("CELERY_BROKER_URL and CELERY_RESULT_BACKEND must be set in environment variables.")
+        raise ValueError(
+            "CELERY_BROKER_URL and CELERY_RESULT_BACKEND must be set in environment variables."
+        )
 
     app = Celery(
         name,
