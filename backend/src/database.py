@@ -26,23 +26,19 @@ else:
     POSTGRES_DB = os.getenv("POSTGRES_DB", "demo_bot")
     POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres_db")
     POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+    DATABASE_URL = os.getenv("DATABASE_URL") or (
+        f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    )
+    try:
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-DATABASE_URL = os.getenv("DATABASE_URL") or (
-    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-)
-
-try:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-    logger.info("Database connection established successfully.")
-except OperationalError as e:
-    logger.error(f"Database connection error: {e}")
-    raise
-
-
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        logger.info("Database connection established successfully.")
+    except OperationalError as e:
+        logger.error(f"Database connection error: {e}")
+        raise
 @contextmanager
 def get_db():
     db = SessionLocal()
