@@ -98,7 +98,9 @@ async def get_chat_response(task_id: str):
 
 # Qdrant endpoints
 @app.post("/collections/create")
-def create_collection_endpoint(collection_name: str = DEFAULT_COLLECTION_NAME, vector_size: int = VECTOR_DIMENSION):
+def create_collection_endpoint(
+    collection_name: str = DEFAULT_COLLECTION_NAME, vector_size: int = VECTOR_DIMENSION
+):
     try:
         status = create_collection(collection_name, vector_size)
         return {"status": status}
@@ -112,7 +114,7 @@ def insert_document_endpoint(title: str, content: str):
     try:
         new_docs = insert_document(title, content)
         doc_id = str(new_docs.id)
-        chunk_and_index_document(doc_id, title, content)
+        chunk_and_index_document.delay(doc_id, title, content)
         return {
             "status": "Document received and indexing started.",
             "document_id": doc_id,
