@@ -7,13 +7,27 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
-POSTGRES_USER = os.getenv("POSTGRES_USER", "posgres_admin")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres_admin")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "demo_bot")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres_db")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+# Check if running in test mode
+TESTING = os.getenv("TESTING", "false").lower() == "true"
 
-DATABASE_URL = (
+if TESTING:
+    # Use SQLite for testing
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///:memory:")
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    )
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    logger.info("Using test database configuration")
+else:
+    # Production PostgreSQL setup
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "posgres_admin")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres_admin")
+    POSTGRES_DB = os.getenv("POSTGRES_DB", "demo_bot")
+    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres_db")
+    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+
+DATABASE_URL = os.getenv("DATABASE_URL") or (
     f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 )
 

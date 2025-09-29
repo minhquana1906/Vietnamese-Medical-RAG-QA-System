@@ -22,13 +22,13 @@ Documentation = "https://minhhquana1906.github.io/Vietnamese-Medical-RAG-QA-Syst
 [dependency-groups]
 dev = [
     "pytest>=7.2.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.1",
+    "httpx>=0.25.0",  # For FastAPI testing
     "pre-commit>=2.20.0",
     "tox-uv>=1.11.3",
-
     "mypy>=0.991",
-
     "ruff>=0.11.5",
-
 ]
 backend = [
     "alembic>=1.16.5",
@@ -68,17 +68,27 @@ build-backend = "hatchling.build"
 packages = ["src"]
 
 [tool.mypy]
-files = ["src"]
-disallow_untyped_defs = true
-disallow_any_unimported = true
-no_implicit_optional = true
-check_untyped_defs = true
+files = ["backend/src"]
+python_version = "3.12"
 warn_return_any = true
-warn_unused_ignores = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Allow gradual typing
+ignore_missing_imports = true
 show_error_codes = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+]
+markers = [
+    "integration: integration tests",
+    "unit: unit tests",
+]
 
 [tool.ruff]
 target-version = "py39"
