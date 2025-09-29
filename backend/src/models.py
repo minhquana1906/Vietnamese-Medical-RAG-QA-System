@@ -25,14 +25,20 @@ def init_db():
 class ChatConversation(Base):
     __tablename__ = "chat_conversations"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
-    conversation_id: Mapped[str] = mapped_column(String(100), nullable=False, default="")
-    bot_id: Mapped[str] = mapped_column(String(100), nullable=False, default="medical_rag_bot")
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, index=True, autoincrement=True
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String(100), nullable=False, default=""
+    )
+    bot_id: Mapped[str] = mapped_column(String(100), nullable=False, default="Meddy")
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, default="user_1")
     message: Mapped[str] = mapped_column(Text, nullable=False)
     is_request: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -44,7 +50,9 @@ class Document(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -83,7 +91,9 @@ def update_conversation(bot_id, user_id, message, is_request=True):
             db.add(new_conversation)
             db.commit()
             db.refresh(new_conversation)
-            logger.info(f"Inserted new message to conversation with ID: {conversation_id}")
+            logger.info(
+                f"Inserted new message to conversation with ID: {conversation_id}"
+            )
             return conversation_id
 
 
@@ -94,7 +104,9 @@ def convert_conversation_to_messages(conversation):
         role = "user" if msg.is_request else "assistant"
         messages.append({"role": role, "content": msg.message})
 
-    logger.info(f"Constructed messages for conversation ID: {conversation[0].id if conversation else 'N/A'}")
+    logger.info(
+        f"Constructed messages for conversation ID: {conversation[0].id if conversation else 'N/A'}"
+    )
     return messages
 
 
