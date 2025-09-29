@@ -70,7 +70,7 @@ services:
     depends_on:
       - valkey_db
       - chatbot_api
-    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R app:app /app/logs/worker &&celery -A backend.src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log"
+    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R app:app /app/logs/worker && celery -A backend.src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log"
     volumes:
       - ./backend/:/usr/src/app
       - worker_volume:/app/logs/worker
