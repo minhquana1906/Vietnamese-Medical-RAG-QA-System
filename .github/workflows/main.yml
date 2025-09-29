@@ -1,50 +1,78 @@
-name: Main
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, develop]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, develop]
 
 jobs:
-  quality:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out
-        uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - name: Set up the environment
-        uses: ./.github/actions/setup-python-env
-
-      - name: Run checks
-        run: make check
-
-  tests-and-type-check:
+  test:
+    name: Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.12"]
-      fail-fast: false
-    defaults:
-      run:
-        shell: bash
+
     steps:
-      - name: Check out
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up the environment
+      - name: Set up Python environment
         uses: ./.github/actions/setup-python-env
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run python -m pytest tests
+        run: |
+          uv run pytest tests/ -v --cov=backend/src --cov-report=term-missing
 
-      - name: Check typing
-        run: uv run mypy
+      - name: Upload coverage
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: false
+
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Run pre-commit
+        run: uv run pre-commit run --all-files
+
+      - name: Run type checking
+        run: uv run mypy backend/src
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, quality]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
