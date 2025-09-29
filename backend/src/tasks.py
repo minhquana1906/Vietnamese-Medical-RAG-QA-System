@@ -21,7 +21,9 @@ celery_app.autodiscover_tasks()
 def chunk_and_index_document(doc_id, title, content):
     try:
         # Chunk the document
-        nodes = dynamic_chunking(text=content, metadata={"doc_id": doc_id, "title": title})
+        nodes = dynamic_chunking(
+            text=content, metadata={"doc_id": doc_id, "title": title}
+        )
 
         # Generate embeddings and prepare points for upsert
         points = []
@@ -58,7 +60,9 @@ def rag_qa_task(history, question):
             top_k=TOP_K,
             collection_name=DEFAULT_COLLECTION_NAME,
         )
-        logger.info(f"Retrieved {len(relevant_docs)} relevant documents.\nDocs: {relevant_docs}")
+        logger.info(
+            f"Retrieved {len(relevant_docs)} relevant documents.\nDocs: {relevant_docs}"
+        )
 
         # format context from relevant documents
         formatted_context = format_context(relevant_docs)
@@ -72,12 +76,16 @@ def rag_qa_task(history, question):
             messages.append({"role": msg["role"], "content": msg["content"]})
 
         # Add the user's question to the message chain
-        messages.append({
-            "role": "user",
-            "content": f"Dựa trên đoạn văn bản sau:\n{formatted_context}\nHãy trả lời câu hỏi sau:\n{question}\nNếu không tìm thấy thông tin trong đoạn văn bản, hãy trả lời lịch sự 'Xin lỗi, tôi không tìm thấy thông tin phù hợp cho câu hỏi: {question}.'",
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Dựa trên đoạn văn bản sau:\n{formatted_context}\nHãy trả lời câu hỏi sau:\n{question}\nNếu không tìm thấy thông tin trong đoạn văn bản, hãy trả lời lịch sự 'Xin lỗi, tôi không tìm thấy thông tin phù hợp cho câu hỏi: {question}.'",
+            }
+        )
 
-        response = openai_chat_complete(messages=messages, temperature=0.1, max_tokens=2048)
+        response = openai_chat_complete(
+            messages=messages, temperature=0.1, max_tokens=2048
+        )
         logger.info(f"Generated RAG response: {response}")
         return response
 
@@ -95,7 +103,9 @@ def message_handler_task(bot_id, user_id, query):
         conversation_id = update_conversation(bot_id, user_id, query, is_request=True)
 
         messages = get_messages_from_conversation(conversation_id)
-        logger.info(f"Retrieved {len(messages)} messages from conversation {conversation_id}")
+        logger.info(
+            f"Retrieved {len(messages)} messages from conversation {conversation_id}"
+        )
 
         # get history of the conversation
         history = messages[:-1]
