@@ -6,12 +6,13 @@ from loguru import logger
 from .brain import (format_context, openai_chat_complete,
                     openai_generate_embedding)
 from .chunking import dynamic_chunking
-from .config import (DEFAULT_COLLECTION_NAME, EMBEDDING_MODEL, SYSTEM_PROMPT,
-                     TOP_K)
+from .config import get_backend_settings
 from .database import get_celery_app
 from .models import get_messages_from_conversation, update_conversation
 from .summarizer import get_summarized_content
 from .vectorize import search_vectors, upsert_points
+
+settings = get_backend_settings()
 
 celery_app = get_celery_app(__name__)
 celery_app.autodiscover_tasks()
@@ -28,7 +29,9 @@ def chunk_and_index_document(doc_id, title, content):
         # Generate embeddings and prepare points for upsert
         points = []
         for node in nodes:
-            embedding = openai_generate_embedding(node.text, model=EMBEDDING_MODEL)
+            embedding = openai_generate_embedding(
+                node.text, model=settings.openai_embedding_model
+            )
             point = {
                 "id": str(uuid.uuid4()),
                 "embedding": embedding,
@@ -41,7 +44,7 @@ def chunk_and_index_document(doc_id, title, content):
             points.append(point)
 
         # Upsert points to Qdrant vector database
-        upsert_points(points, collection_name=DEFAULT_COLLECTION_NAME)
+        upsert_points(points, collection_name=settings.default_collection_name)
     except Exception as e:
         logger.error(f"Error in chunking and indexing document: {e}")
         raise
@@ -51,14 +54,16 @@ def chunk_and_index_document(doc_id, title, content):
 def rag_qa_task(history, question):
     try:
         # embedding question
-        question_embedding = openai_generate_embedding(question, model=EMBEDDING_MODEL)
+        question_embedding = openai_generate_embedding(
+            question, model=settings.openai_embedding_model
+        )
         logger.info(f"Generated embedding for question: {question_embedding[:50]}...")
 
         # retrieve top-k most relevant documents
         relevant_docs = search_vectors(
             query_vector=question_embedding,
-            top_k=TOP_K,
-            collection_name=DEFAULT_COLLECTION_NAME,
+            top_k=settings.top_k,
+            collection_name=settings.default_collection_name,
         )
         logger.info(
             f"Retrieved {len(relevant_docs)} relevant documents.\nDocs: {relevant_docs}"
@@ -69,7 +74,7 @@ def rag_qa_task(history, question):
         logger.info(f"Generated context from documents: {formatted_context}")
 
         # Build the message chain
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": settings.system_prompt}]
 
         # Add history to the message chain
         for msg in history:
@@ -79,7 +84,9 @@ def rag_qa_task(history, question):
         messages.append(
             {
                 "role": "user",
-                "content": f"Dựa trên đoạn văn bản sau:\n{formatted_context}\nHãy trả lời câu hỏi sau:\n{question}\nNếu không tìm thấy thông tin trong đoạn văn bản, hãy trả lời lịch sự 'Xin lỗi, tôi không tìm thấy thông tin phù hợp cho câu hỏi: {question}.'",
+                "content": settings.rag_prompt.format(
+                    context=formatted_context, question=question
+                ),
             }
         )
 

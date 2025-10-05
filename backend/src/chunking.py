@@ -6,10 +6,17 @@ from llama_index.core.schema import Document, TextNode
 from loguru import logger
 
 from .brain import openai_chat_complete
-from .config import CHUNK_OVERLAP, CHUNK_SIZE
+from .config import get_backend_settings
+
+settings = get_backend_settings()
 
 
-def chunk_by_window_sentences(text, metadata=None, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP):
+def chunk_by_window_sentences(
+    text,
+    metadata=None,
+    chunk_size=settings.chunk_size,
+    chunk_overlap=settings.chunk_overlap,
+):
     logger.info("Chunking document by window sentences...")
     try:
         if metadata is not None:
@@ -71,7 +78,10 @@ def chunk_by_llm(text, metadata=None):
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to decode LLM response as JSON: {e}")
 
-        nodes = [TextNode(text=node, metadata=metadata) if metadata else TextNode(text=node) for node in chunks]
+        nodes = [
+            TextNode(text=node, metadata=metadata) if metadata else TextNode(text=node)
+            for node in chunks
+        ]
         logger.info(f"Document chunked into {len(nodes)} chunks by LLM.")
         return nodes
     except Exception as e:
@@ -80,10 +90,14 @@ def chunk_by_llm(text, metadata=None):
 
 
 def dynamic_chunking(text, metadata=None):
-    if len(text) < CHUNK_SIZE:
+    if len(text) < settings.chunk_size:
         logger.info("Document is smaller than chunk size, creating single chunk.")
-        return [TextNode(text=text, metadata=metadata)] if metadata else [TextNode(text=text)]
-    elif len(text) < CHUNK_SIZE * 4:
+        return (
+            [TextNode(text=text, metadata=metadata)]
+            if metadata
+            else [TextNode(text=text)]
+        )
+    elif len(text) < settings.chunk_size * 3:
         return chunk_by_window_sentences(text, metadata)
     else:
         return chunk_by_llm(text, metadata)
