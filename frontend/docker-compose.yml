@@ -1,7 +1,7 @@
 services:
   chatbot_ui:
     build:
-      context: .
+      context: ..
       dockerfile: frontend/Dockerfile
     container_name: chatbot_ui
     restart: always
@@ -14,4 +14,4 @@ services:
 
 networks:
   medical_rag_qa_network:
-    driver: bridge
+    external: true

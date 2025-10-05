@@ -4,8 +4,8 @@ from helper import streaming_response_generator
 st.title("Hỏi đáp y khoa với Meddy 🤓")
 st.markdown(
     """
-**Xin chào, tôi là Meddy!** 🤗
-Tôi ở đây để giúp bạn giải quyết, tra cứu các thông tin trong lĩnh vực y tế. Hãy cứ thoải mái hỏi tôi bất cứ điều gì về y tế, và tôi sẽ làm hết sức mình để hỗ trợ bạn!
+**Xin chào, tôi là Meddy!** 🤗\n
+Tôi ở đây để giúp bạn giải quyết, tra cứu các thông tin trong lĩnh vực y tế. Hãy cứ thoải mái hỏi tôi bất cứ điều gì trong phạm trù kiến thức y khoa, tôi sẽ làm hết sức mình để hỗ trợ bạn!
 """
 )
 
