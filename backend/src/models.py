@@ -5,8 +5,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from .cache import get_conversation_id
-from .config import SYSTEM_PROMPT
+from .config import get_backend_settings
 from .database import engine, get_db
+
+settings = get_backend_settings()
 
 
 class Base(DeclarativeBase):
@@ -98,7 +100,7 @@ def update_conversation(bot_id, user_id, message, is_request=True):
 
 
 def convert_conversation_to_messages(conversation):
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": settings.system_prompt}]
 
     for msg in conversation:
         role = "user" if msg.is_request else "assistant"
@@ -115,7 +117,7 @@ def get_messages_from_conversation(conversation_id):
     if conversation:
         return convert_conversation_to_messages(conversation)
     else:
-        return [{"role": "system", "content": SYSTEM_PROMPT}]
+        return [{"role": "system", "content": settings.system_prompt}]
 
 
 # document's CRUD operations

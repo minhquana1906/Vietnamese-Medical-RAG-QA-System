@@ -5,7 +5,7 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 
-from .config import DEFAULT_COLLECTION_NAME, VECTOR_DIMENSION
+from .config import get_backend_settings
 from .models import init_db, insert_document
 from .schema import CompleteRequest
 from .tasks import chunk_and_index_document, message_handler_task
@@ -13,8 +13,9 @@ from .utils import setup_logger
 from .vectorize import create_collection
 
 setup_logger()
+settings = get_backend_settings()
 
-app = FastAPI(title="Vietnamese Medical RAG-QA System", version="0.1.0")
+app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 
 @app.on_event("startup")
@@ -30,7 +31,7 @@ def on_startup():
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Vietnamese Medical RAG-QA System API!"}
+    return {"message": f"Welcome to the {settings.app_name} API!"}
 
 
 @app.get("/ready")
@@ -99,7 +100,8 @@ async def get_chat_response(task_id: str):
 # Qdrant endpoints
 @app.post("/collections/create")
 def create_collection_endpoint(
-    collection_name: str = DEFAULT_COLLECTION_NAME, vector_size: int = VECTOR_DIMENSION
+    collection_name: str = settings.default_collection_name,
+    vector_size: int = settings.vector_dimension,
 ):
     try:
         status = create_collection(collection_name, vector_size)

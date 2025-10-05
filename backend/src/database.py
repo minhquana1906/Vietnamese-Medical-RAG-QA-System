@@ -3,9 +3,11 @@ from contextlib import contextmanager
 
 from celery import Celery
 from loguru import logger
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
+
+from .config import get_backend_settings, get_database_settings
 
 # Check if running in test mode
 TESTING = os.getenv("TESTING", "false").lower() == "true"
@@ -20,17 +22,11 @@ if TESTING:
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     logger.info("Using test database configuration")
 else:
-    # Production PostgreSQL setup
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres_admin")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres_admin")
-    POSTGRES_DB = os.getenv("POSTGRES_DB", "demo_bot")
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres_db")
-    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-    DATABASE_URL = os.getenv("DATABASE_URL") or (
-        f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-    )
+
+    settings = get_database_settings()
+
     try:
-        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        engine = create_engine(settings.database_url, pool_pre_ping=True)
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         logger.info("Database connection established successfully.")
     except OperationalError as e:
@@ -52,8 +48,9 @@ def get_db():
 
 
 def get_celery_app(name):
-    broker_url = os.getenv("CELERY_BROKER_URL")
-    result_backend = os.getenv("CELERY_RESULT_BACKEND")
+    settings = get_backend_settings()
+    broker_url = settings.celery_broker_url
+    result_backend = settings.celery_result_backend
     if not broker_url or not result_backend:
         raise ValueError(
             "CELERY_BROKER_URL and CELERY_RESULT_BACKEND must be set in environment variables."
@@ -71,10 +68,10 @@ def get_celery_app(name):
         accept_content=["json"],
         timezone="Asia/Ho_Chi_Minh",
         enable_utc=True,
-        worker_max_tasks_per_child=1,  # Restart worker after each task to prevent memory leaks
-        worker_concurrency=2,  # Adjust based on your server's CPU cores
-        task_acks_late=True,  # Acknowledge tasks after they have been executed
-        worker_hijack_root_logger=False,  # Prevent Celery from hijacking the root logger
+        worker_max_tasks_per_child=1,
+        worker_concurrency=2,
+        task_acks_late=True,
+        worker_hijack_root_logger=False,
         worker_log_format="[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
         worker_task_log_format="[%(asctime)s: %(levelname)s/%(processName)s] [%(task_name)s(%(task_id)s)] %(message)s",
     )
