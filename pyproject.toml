@@ -53,6 +53,7 @@ backend = [
     "qdrant-client==1.10.1",
     "redis==5.0.7",
     "sqlalchemy==2.0.32",
+    "types-pyyaml>=6.0.12.20250915",
     "uvicorn==0.30.6",
 ]
 frontend = [
