@@ -8,10 +8,32 @@ from fastapi.testclient import TestClient
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+# Set environment variables for testing
 os.environ["TESTING"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
+# OpenAI & Cohere API keys (mock values for testing)
+os.environ["OPENAI_API_KEY"] = "test-openai-key"
+os.environ["COHERE_API_KEY"] = "test-cohere-key"
+
+# Redis configuration
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["REDIS_PORT"] = "6379"
+
+# Celery configuration
 os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/0"
 os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6379/0"
+
+# Qdrant configuration
+os.environ["QDRANT_HOST"] = "localhost"
+os.environ["QDRANT_PORT"] = "6333"
+
+# PostgreSQL configuration (for testing)
+os.environ["POSTGRES_USER"] = "test_user"
+os.environ["POSTGRES_PASSWORD"] = "test_password"
+os.environ["POSTGRES_DB"] = "test_db"
+os.environ["POSTGRES_HOST"] = "localhost"
+os.environ["POSTGRES_PORT"] = "5432"
 
 
 @pytest.fixture
