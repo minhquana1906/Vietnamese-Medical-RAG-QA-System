@@ -28,9 +28,7 @@ def openai_generate_embedding(text, model=settings.openai_embedding_model):
             input=text,
             model=model,
         )
-        res = response.data[0].embedding
-        logger.info(f"Generated embedding for {text}: {res[:10]}...")
-        return res
+        return response.data[0].embedding
     except Exception as e:
         logger.error(f"Error generating embedding for {text}: {e}")
         raise
@@ -50,9 +48,7 @@ def openai_chat_complete(
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        content = response.choices[0].message.content
-        # logger.info(f"Generated response: {content}")
-        return content
+        return response.choices[0].message.content
     except Exception as e:
         logger.error(f"Error generating response: {e}")
         raise

@@ -16,5 +16,5 @@ def generate_request_id(max_length=32):
 
 
 def setup_logger():
-    logger.add("docker/logs/app.log", rotation="10 MB", retention="30 days", level="INFO")
+    logger.add("logs/app.log", rotation="10 MB", retention="30 days", level="INFO")
     logger.info("Logger is set up.")
