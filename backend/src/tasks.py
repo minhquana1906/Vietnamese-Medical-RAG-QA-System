@@ -53,15 +53,6 @@ def chunk_and_index_document(doc_id, title, content):
 
 @shared_task
 def rag_qa_task(history, question):
-    """
-    RAG QA task: Retrieve documents, rerank, and generate answer.
-
-    Logging strategy:
-    - Log retrieval metrics (doc count - CRITICAL)
-    - Log rerank results (CRITICAL for quality)
-    - Skip embedding/context logs (too verbose)
-    - Log final response (IMPORTANT for monitoring)
-    """
     try:
         # Generate embedding for question
         question_embedding = openai_generate_embedding(
@@ -112,16 +103,7 @@ def rag_qa_task(history, question):
 
 @shared_task
 def message_handler_task(bot_id, user_id, query):
-    """
-    Main message handler task.
-
-    Logging strategy:
-    - Start/End events (CRITICAL for tracing)
-    - Conversation ID (IMPORTANT for debugging)
-    - Message count (USEFUL metric)
-    - Errors (CRITICAL)
-    """
-    logger.info(f"▶ Message handler started: {bot_id}/{user_id}")
+    logger.info(f"Message handler started: {bot_id}/{user_id}")
 
     try:
         # Add query message to db (mark as request)
