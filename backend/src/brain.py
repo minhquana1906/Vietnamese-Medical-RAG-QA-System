@@ -3,7 +3,9 @@ import os
 from loguru import logger
 from openai import OpenAI
 
-from .config import EMBEDDING_MODEL, LLM, MAX_TOKENS, TEMPERATURE
+from .config import get_backend_settings
+
+settings = get_backend_settings()
 
 
 def get_openai_client():
@@ -18,7 +20,7 @@ def get_openai_client():
         raise
 
 
-def openai_generate_embedding(text, model=EMBEDDING_MODEL):
+def openai_generate_embedding(text, model=settings.openai_embedding_model):
     try:
         text = text.replace("\n", " ")
         client = get_openai_client()
@@ -26,16 +28,17 @@ def openai_generate_embedding(text, model=EMBEDDING_MODEL):
             input=text,
             model=model,
         )
-        res = response.data[0].embedding
-        logger.info(f"Generated embedding for {text}: {res[:10]}...")
-        return res
+        return response.data[0].embedding
     except Exception as e:
         logger.error(f"Error generating embedding for {text}: {e}")
         raise
 
 
 def openai_chat_complete(
-    messages, model=LLM, temperature=TEMPERATURE, max_tokens=MAX_TOKENS
+    messages,
+    model=settings.openai_model,
+    temperature=settings.temperature,
+    max_tokens=settings.max_tokens,
 ):
     try:
         client = get_openai_client()
@@ -45,9 +48,7 @@ def openai_chat_complete(
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        content = response.choices[0].message.content
-        # logger.info(f"Generated response: {content}")
-        return content
+        return response.choices[0].message.content
     except Exception as e:
         logger.error(f"Error generating response: {e}")
         raise
@@ -57,7 +58,7 @@ def format_context(docs):
     try:
         context = ""
         for i, doc in enumerate(docs):
-            context += f"Đoạn văn bản {i + 1} (Điểm tin cậy: {doc['score']}):\nTiêu đề: {doc['title']}\nNội dung: {doc['content']}\n\n"
+            context += f"Document {i + 1} (Confidence Score: {doc['score']}):\nTitle: {doc['title']}\nContent: {doc['content']}\n\n"
         return context
     except Exception as e:
         logger.error(f"Error structuring context: {e}")

@@ -4,11 +4,11 @@ ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 
-COPY uv.lock pyproject.toml ./
+COPY uv.lock pyproject.toml README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-dev --group backend
 
-COPY . .
+COPY backend/ ./backend/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --group backend
 
@@ -20,10 +20,10 @@ RUN groupadd --gid 1000 app && \
 
 COPY --from=builder --chown=app:app /app /app
 
-RUN mkdir -p /app/logs/worker /app/nltk_data && \
-    chown -R app:app /app/logs/worker /app/nltk_data
+RUN mkdir /app/nltk_data && \
+    chown -R app:app /app/nltk_data
 
-WORKDIR /app
+WORKDIR /app/backend
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV NLTK_DATA="/app/nltk_data"
@@ -31,4 +31,4 @@ ENV NLTK_DATA="/app/nltk_data"
 USER app
 
 
-CMD ["/bin/bash", "-c", "python backend/scripts/init_nltk.py && uvicorn backend.src.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info"]
+CMD ["/bin/bash", "-c", "python scripts/init_nltk.py && uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info"]
