@@ -6,7 +6,7 @@ from loguru import logger
 
 
 def download_nltk_data():
-    nltk_data_dir = os.getenv("NLTK_DATA", "/app/backend/nltk_data")
+    nltk_data_dir = os.getenv("NLTK_DATA", "/app/nltk_data")
     punkt_path = Path(nltk_data_dir) / "tokenizers" / "punkt_tab"
 
     if not punkt_path.exists():

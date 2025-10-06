@@ -20,13 +20,13 @@ RUN groupadd --gid 1000 app && \
 
 COPY --from=builder --chown=app:app /app /app
 
-RUN mkdir /app/backend/nltk_data && \
-    chown -R app:app /app/backend/nltk_data
+RUN mkdir /app/nltk_data && \
+    chown -R app:app /app/nltk_data
 
 WORKDIR /app/backend
 
 ENV PATH="/app/.venv/bin:$PATH"
-ENV NLTK_DATA="/app/backend/nltk_data"
+ENV NLTK_DATA="/app/nltk_data"
 
 USER app
 

@@ -6,7 +6,6 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
@@ -40,7 +39,8 @@ services:
       - qdrant_db
       - valkey_db
     volumes:
-      - nltk_data:/app/backend/nltk_data
+      - nltk_data:/app/nltk_data
+      - .:/app/backend
     networks:
       - medical_rag_qa_network
 
@@ -57,9 +57,9 @@ services:
       - chatbot_api
     command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R app:app /app/logs/worker && celery -A src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log"
     volumes:
-      - .:/usr/src/app
+      - .:/app/backend
       - worker_volume:/app/logs/worker
-      - nltk_data:/app/backend/nltk_data
+      - nltk_data:/app/nltk_data
     networks:
       - medical_rag_qa_network
 

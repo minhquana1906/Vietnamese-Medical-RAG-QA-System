@@ -54,17 +54,22 @@ def chunk_by_llm(text, metadata=None):
             {
                 "role": "system",
                 "content": (
-                    "You are an assistant that splits text into smaller chunks. "
-                    "Each chunk should be no longer than 512 characters, with an overlap of 50 characters. "
-                    "Return the result as a JSON array of strings, where each string is a chunk of the text. "
-                    "Do not include any markdown formatting (e.g., ```json). Only return the JSON array."
+                    "You are a text segmentation assistant. "
+                    "Your task is to split the provided text into overlapping chunks. "
+                    "Each chunk must be no longer than 512 characters, and adjacent chunks must overlap by 50 characters. "
+                    "Preserve sentence boundaries when possible, but prioritize respecting the length and overlap rules. "
+                    "Return only a valid JSON array of strings — no explanations, no markdown, no code fences. "
+                    "Each array element should be a single chunk of text."
                 ),
             },
             {
                 "role": "user",
-                "content": f"## Input text ##: {text}\n\n"
-                f'## Output format ##: ["chunk1", "chunk2", ...]\n\n'
-                f"## Output ##: ",
+                "content": (
+                    "Input text:\n"
+                    f"{text}\n\n"
+                    "Expected output format:\n"
+                    '["chunk1", "chunk2", "chunk3", ...]'
+                ),
             },
         ]
 
