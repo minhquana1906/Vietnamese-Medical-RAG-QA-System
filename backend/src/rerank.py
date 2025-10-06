@@ -20,12 +20,6 @@ def get_cohere_client():
 
 
 def rerank_documents(query, documents, model=settings.cohere_rerank_model, top_n=5):
-    """
-    Rerank documents using Cohere rerank API.
-
-    Note: Keeps rerank results (CRITICAL for quality monitoring).
-    Format optimized for readability.
-    """
     try:
         client = get_cohere_client()
         yaml_docs = [yaml.dump(doc, sort_keys=False) for doc in documents]
@@ -35,10 +29,12 @@ def rerank_documents(query, documents, model=settings.cohere_rerank_model, top_n
         ).results
 
         # Log reranked results in compact format
-        rerank_summary = ", ".join([
-            f"#{rank} (score={doc.relevance_score:.3f})"
-            for rank, doc in enumerate(reranked_documents, start=1)
-        ])
+        rerank_summary = ", ".join(
+            [
+                f"#{rank} (score={doc.relevance_score:.3f})"
+                for rank, doc in enumerate(reranked_documents, start=1)
+            ]
+        )
         logger.info(f"Reranked {len(reranked_documents)} docs: {rerank_summary}")
 
         return reranked_documents
