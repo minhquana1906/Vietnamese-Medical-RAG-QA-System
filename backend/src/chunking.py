@@ -19,10 +19,11 @@ def chunk_by_window_sentences(
 ):
     logger.info("Chunking document by window sentences...")
     try:
-        if metadata is not None:
-            document = Document(text=text, metadata=metadata)
-        else:
-            document = Document(text=text)
+        document = (
+            Document(text=text, metadata=metadata)
+            if metadata is not None
+            else Document(text=text)
+        )
 
         splitter = SentenceSplitter.from_defaults(
             chunk_size=chunk_size,
@@ -102,7 +103,8 @@ def dynamic_chunking(text, metadata=None):
             if metadata
             else [TextNode(text=text)]
         )
-    elif len(text) < settings.chunk_size * 3:
-        return chunk_by_window_sentences(text, metadata)
+    # elif len(text) < settings.chunk_size * 3:
+    #     return chunk_by_window_sentences(text, metadata)
     else:
-        return chunk_by_llm(text, metadata)
+        return chunk_by_window_sentences(text, metadata)
+        # return chunk_by_llm(text, metadata)

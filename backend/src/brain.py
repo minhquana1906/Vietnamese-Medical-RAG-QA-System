@@ -1,5 +1,6 @@
 import os
 
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from loguru import logger
 from openai import OpenAI
 
@@ -20,6 +21,7 @@ def get_openai_client():
         raise
 
 
+# openai embedding
 def openai_generate_embedding(text, model=settings.openai_embedding_model):
     try:
         text = text.replace("\n", " ")
@@ -34,6 +36,19 @@ def openai_generate_embedding(text, model=settings.openai_embedding_model):
         raise
 
 
+# oss embedding
+def oss_generate_embedding(text, model=settings.oss_embedding_model):
+    try:
+        text = text.replace("\n", " ")
+        model = HuggingFaceEmbedding(model_name=model, trust_remote_code=True)
+        response = model.get_text_embedding(text)
+        return response
+    except Exception as e:
+        logger.error(f"Error generating embedding for {text}: {e}")
+        raise
+
+
+# openai chat completion
 def openai_chat_complete(
     messages,
     model=settings.openai_model,
@@ -52,6 +67,18 @@ def openai_chat_complete(
     except Exception as e:
         logger.error(f"Error generating response: {e}")
         raise
+
+
+# oss llm chat complete
+def qwen3_chat_complete(
+    messages,
+    model=settings.qwen3_llm,
+    temperature=settings.qwen3_temperature,
+    top_k=settings.qwen3_top_k,
+    top_p=settings.qwen3_top_p,
+):
+    # TODO: Serving Qwen3 via VLLM
+    pass
 
 
 def format_context(docs):

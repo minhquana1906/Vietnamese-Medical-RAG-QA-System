@@ -93,7 +93,7 @@ def rag_qa_task(history, question):
         response = openai_chat_complete(
             messages=messages, temperature=0.1, max_tokens=2048
         )
-        logger.info(f"✓ RAG response generated successfully")
+        logger.info("RAG response generated successfully")
         return response
 
     except Exception as e:

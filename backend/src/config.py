@@ -35,15 +35,30 @@ class BackendSettings(BaseSettings):
     openai_embedding_model: str = Field(default="text-embedding-3-small")
     cohere_rerank_model: str = Field(default="rerank-multilingual-v3.0")
 
+    # Qwen3 models
+    qwen3_llm: str = Field(default="Qwen/Qwen3-0.6B")
+    qwen3_embedding_model: str = Field(default="Qwen/Qwen3-Embedding-0.6B")
+    qwen3_rerank_model: str = Field(default="Qwen/Qwen3-Reranker-0.6B")
+
+    oss_embedding_model: str = Field(
+        default="dangvantuan/vietnamese-document-embedding"
+    )
+
     system_prompt: str = Field(default=SYSTEM_PROMPT)
     rag_prompt: str = Field(default=RAG_PROMPT)
     temperature: float = Field(default=0.7)
     max_tokens: int = Field(default=2048)
 
+    # qwen3's parameters
+    qwen3_temperature: float = Field(default=0.7)
+    qwen3_top_k: int = Field(default=20)
+    qwen3_top_p: float = Field(default=0.95)
+
     # Qdrant vector database configuration
     default_collection_name: str = Field(default="documents")
-    vector_dimension: int = Field(default=1536)
+    vector_dimension: int = Field(default=768)
     top_k: int = Field(default=5)
+    batch_points: int = Field(default=128)
 
     # CHUNKING settings
     chunk_size: int = Field(default=512)

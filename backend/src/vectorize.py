@@ -1,13 +1,14 @@
 from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
+from tqdm import tqdm
 
 from .config import get_backend_settings
 
 settings = get_backend_settings()
 
 
-def get_qdrant_client(host="qdrant_db", port=6333):
+def get_qdrant_client(host="localhost", port=6333):
     try:
         client = QdrantClient(host=host, port=port)
         return client
@@ -64,6 +65,24 @@ def upsert_points(points, collection_name=settings.default_collection_name):
     except Exception as e:
         logger.error(f"Error upserting points: {e}")
         raise
+
+
+def batch_upsert(points, batch_size=settings.batch_points):
+    logger.info(f"⬆️ Uploading {len(points)} points (batch size: {batch_size})...")
+
+    total_batches = (len(points) + batch_size - 1) // batch_size
+
+    for i in tqdm(
+        range(0, len(points), batch_size), total=total_batches, desc="Uploading"
+    ):
+        batch = points[i : i + batch_size]
+        try:
+            upsert_points(batch, collection_name=settings.default_collection_name)
+        except Exception as e:
+            logger.error(f"Batch {i//batch_size + 1} failed: {e}")
+            raise
+
+    logger.info("All batches uploaded successfully")
 
 
 def search_vectors(
