@@ -4,8 +4,8 @@ from helper import streaming_response_generator
 st.title("Hỏi đáp y khoa với Meddy 🤓")
 st.markdown(
     """
-**Xin chào, tôi là Meddy!** 🤗
-Tôi ở đây để giúp bạn giải quyết, tra cứu các thông tin trong lĩnh vực y tế. Hãy cứ thoải mái hỏi tôi bất cứ điều gì về y tế, và tôi sẽ làm hết sức mình để hỗ trợ bạn!
+**Xin chào, tôi là Meddy!** 🤗\n
+Tôi ở đây để giúp bạn giải quyết, tra cứu các thông tin trong lĩnh vực y tế. Hãy cứ thoải mái hỏi tôi bất cứ điều gì trong phạm trù kiến thức y khoa, tôi sẽ làm hết sức mình để hỗ trợ bạn!
 """
 )
 
@@ -34,15 +34,17 @@ if prompt := st.chat_input("Tôi có thể giúp gì cho bạn?"):
                     continue
 
                 full_response += chunk
-                message_placeholder.markdown(full_response + " ")
+                # Display with cursor during streaming
+                message_placeholder.markdown(full_response + "▌")
 
+            # Final display without cursor
             message_placeholder.markdown(full_response)
 
             if full_response.strip():
                 st.session_state.messages.append(
                     {"role": "assistant", "content": full_response}
                 )
-        except Exception as e:
+        except Exception:
             error_message = "❌ Đã xảy ra lỗi khi xử lý yêu cầu. Vui lòng thử lại."
             message_placeholder.markdown(error_message)
             st.session_state.messages.append(

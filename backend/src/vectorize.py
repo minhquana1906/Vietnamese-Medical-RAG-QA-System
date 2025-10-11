@@ -2,7 +2,9 @@ from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from .config import DEFAULT_COLLECTION_NAME, TOP_K, VECTOR_DIMENSION
+from .config import get_backend_settings
+
+settings = get_backend_settings()
 
 
 def get_qdrant_client(host="qdrant_db", port=6333):
@@ -15,7 +17,8 @@ def get_qdrant_client(host="qdrant_db", port=6333):
 
 
 def create_collection(
-    collection_name=DEFAULT_COLLECTION_NAME, vector_dimension=VECTOR_DIMENSION
+    collection_name=settings.default_collection_name,
+    vector_dimension=settings.vector_dimension,
 ):
     try:
         client = get_qdrant_client()
@@ -42,7 +45,7 @@ def create_collection(
         raise
 
 
-def upsert_points(points, collection_name=DEFAULT_COLLECTION_NAME):
+def upsert_points(points, collection_name=settings.default_collection_name):
     try:
         client = get_qdrant_client()
         point_structs = [
@@ -63,7 +66,11 @@ def upsert_points(points, collection_name=DEFAULT_COLLECTION_NAME):
         raise
 
 
-def search_vectors(query_vector, top_k=TOP_K, collection_name=DEFAULT_COLLECTION_NAME):
+def search_vectors(
+    query_vector,
+    top_k=settings.top_k,
+    collection_name=settings.default_collection_name,
+):
     try:
         client = get_qdrant_client()
         search_result = client.search(

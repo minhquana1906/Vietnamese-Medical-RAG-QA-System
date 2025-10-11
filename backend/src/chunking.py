@@ -6,10 +6,17 @@ from llama_index.core.schema import Document, TextNode
 from loguru import logger
 
 from .brain import openai_chat_complete
-from .config import CHUNK_OVERLAP, CHUNK_SIZE
+from .config import get_backend_settings
+
+settings = get_backend_settings()
 
 
-def chunk_by_window_sentences(text, metadata=None, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP):
+def chunk_by_window_sentences(
+    text,
+    metadata=None,
+    chunk_size=settings.chunk_size,
+    chunk_overlap=settings.chunk_overlap,
+):
     logger.info("Chunking document by window sentences...")
     try:
         if metadata is not None:
@@ -47,17 +54,22 @@ def chunk_by_llm(text, metadata=None):
             {
                 "role": "system",
                 "content": (
-                    "You are an assistant that splits text into smaller chunks. "
-                    "Each chunk should be no longer than 512 characters, with an overlap of 50 characters. "
-                    "Return the result as a JSON array of strings, where each string is a chunk of the text. "
-                    "Do not include any markdown formatting (e.g., ```json). Only return the JSON array."
+                    "You are a text segmentation assistant. "
+                    "Your task is to split the provided text into overlapping chunks. "
+                    "Each chunk must be no longer than 512 characters, and adjacent chunks must overlap by 50 characters. "
+                    "Preserve sentence boundaries when possible, but prioritize respecting the length and overlap rules. "
+                    "Return only a valid JSON array of strings — no explanations, no markdown, no code fences. "
+                    "Each array element should be a single chunk of text."
                 ),
             },
             {
                 "role": "user",
-                "content": f"## Input text ##: {text}\n\n"
-                f'## Output format ##: ["chunk1", "chunk2", ...]\n\n'
-                f"## Output ##: ",
+                "content": (
+                    "Input text:\n"
+                    f"{text}\n\n"
+                    "Expected output format:\n"
+                    '["chunk1", "chunk2", "chunk3", ...]'
+                ),
             },
         ]
 
@@ -71,7 +83,10 @@ def chunk_by_llm(text, metadata=None):
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to decode LLM response as JSON: {e}")
 
-        nodes = [TextNode(text=node, metadata=metadata) if metadata else TextNode(text=node) for node in chunks]
+        nodes = [
+            TextNode(text=node, metadata=metadata) if metadata else TextNode(text=node)
+            for node in chunks
+        ]
         logger.info(f"Document chunked into {len(nodes)} chunks by LLM.")
         return nodes
     except Exception as e:
@@ -80,10 +95,14 @@ def chunk_by_llm(text, metadata=None):
 
 
 def dynamic_chunking(text, metadata=None):
-    if len(text) < CHUNK_SIZE:
+    if len(text) < settings.chunk_size:
         logger.info("Document is smaller than chunk size, creating single chunk.")
-        return [TextNode(text=text, metadata=metadata)] if metadata else [TextNode(text=text)]
-    elif len(text) < CHUNK_SIZE * 4:
+        return (
+            [TextNode(text=text, metadata=metadata)]
+            if metadata
+            else [TextNode(text=text)]
+        )
+    elif len(text) < settings.chunk_size * 3:
         return chunk_by_window_sentences(text, metadata)
     else:
         return chunk_by_llm(text, metadata)

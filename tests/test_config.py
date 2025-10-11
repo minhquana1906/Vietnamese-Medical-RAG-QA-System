@@ -1,49 +1,91 @@
 def test_config_values():
-    from backend.src import config
+    """
+    Test BackendSettings configuration values.
 
-    assert hasattr(config, "LLM")
-    assert hasattr(config, "EMBEDDING_MODEL")
-    assert hasattr(config, "TEMPERATURE")
-    assert hasattr(config, "MAX_TOKENS")
+    Updated to use Pydantic Settings pattern.
+    """
+    from backend.src.config import get_backend_settings
 
-    assert isinstance(config.TEMPERATURE, (int, float))
-    assert 0 <= config.TEMPERATURE <= 2
-    assert isinstance(config.MAX_TOKENS, int)
-    assert config.MAX_TOKENS > 0
+    settings = get_backend_settings()
+
+    # Check LLM model settings
+    assert hasattr(settings, "openai_model")
+    assert hasattr(settings, "openai_embedding_model")
+    assert hasattr(settings, "temperature")
+    assert hasattr(settings, "max_tokens")
+
+    # Validate temperature range
+    assert isinstance(settings.temperature, (int, float))
+    assert 0 <= settings.temperature <= 2
+
+    # Validate max_tokens
+    assert isinstance(settings.max_tokens, int)
+    assert settings.max_tokens > 0
 
 
 def test_qdrant_config():
-    from backend.src import config
+    """
+    Test Qdrant vector database configuration.
 
-    assert hasattr(config, "DEFAULT_COLLECTION_NAME")
-    assert hasattr(config, "VECTOR_DIMENSION")
-    assert hasattr(config, "TOP_K")
+    Updated to use Pydantic Settings pattern.
+    """
+    from backend.src.config import get_backend_settings
 
-    assert isinstance(config.VECTOR_DIMENSION, int)
-    assert config.VECTOR_DIMENSION > 0
-    assert isinstance(config.TOP_K, int)
-    assert config.TOP_K > 0
+    settings = get_backend_settings()
+
+    # Check Qdrant settings
+    assert hasattr(settings, "default_collection_name")
+    assert hasattr(settings, "vector_dimension")
+    assert hasattr(settings, "top_k")
+
+    # Validate vector dimension
+    assert isinstance(settings.vector_dimension, int)
+    assert settings.vector_dimension > 0
+
+    # Validate top_k
+    assert isinstance(settings.top_k, int)
+    assert settings.top_k > 0
 
 
 def test_chunking_config():
-    from backend.src import config
+    """
+    Test document chunking configuration.
 
-    assert hasattr(config, "CHUNK_SIZE")
-    assert hasattr(config, "CHUNK_OVERLAP")
+    Updated to use Pydantic Settings pattern.
+    """
+    from backend.src.config import get_backend_settings
 
-    assert isinstance(config.CHUNK_SIZE, int)
-    assert config.CHUNK_SIZE > 0
-    assert isinstance(config.CHUNK_OVERLAP, int)
-    assert config.CHUNK_OVERLAP >= 0
-    assert config.CHUNK_OVERLAP < config.CHUNK_SIZE
+    settings = get_backend_settings()
+
+    # Check chunking settings
+    assert hasattr(settings, "chunk_size")
+    assert hasattr(settings, "chunk_overlap")
+
+    # Validate chunk size
+    assert isinstance(settings.chunk_size, int)
+    assert settings.chunk_size > 0
+
+    # Validate chunk overlap
+    assert isinstance(settings.chunk_overlap, int)
+    assert settings.chunk_overlap >= 0
+    assert settings.chunk_overlap < settings.chunk_size
 
 
 def test_system_prompt():
-    from backend.src import config
+    """
+    Test system prompt configuration.
 
-    assert hasattr(config, "SYSTEM_PROMPT")
-    assert isinstance(config.SYSTEM_PROMPT, str)
-    assert len(config.SYSTEM_PROMPT) > 0
+    Updated to use Pydantic Settings pattern.
+    """
+    from backend.src.config import get_backend_settings
 
+    settings = get_backend_settings()
+
+    # Check system prompt
+    assert hasattr(settings, "system_prompt")
+    assert isinstance(settings.system_prompt, str)
+    assert len(settings.system_prompt) > 0
+
+    # Verify Vietnamese content
     vietnamese_words = ["Bạn", "trả lời", "câu hỏi", "tài liệu"]
-    assert any(word in config.SYSTEM_PROMPT for word in vietnamese_words)
+    assert any(word in settings.system_prompt for word in vietnamese_words)
