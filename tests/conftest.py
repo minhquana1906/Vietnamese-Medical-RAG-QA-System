@@ -15,6 +15,8 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 # OpenAI & Cohere API keys (mock values for testing)
 os.environ["OPENAI_API_KEY"] = "test-openai-key"
 os.environ["COHERE_API_KEY"] = "test-cohere-key"
+os.environ["TAVILY_API_KEY"] = "test-tavily-key"
+os.environ["HF_TOKEN"] = "test-huggingface-key"
 
 # Redis configuration
 os.environ["REDIS_HOST"] = "localhost"
