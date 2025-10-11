@@ -1,10 +1,8 @@
-import logging
-
 from celery import shared_task
 from llama_index.core.agent import ReActAgent
-from llama_index.core.llms import ChatMessage
-from llama_index.core.tools import BaseTool, FunctionTool
+from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
+from loguru import logger
 
 from .functions.calculator import add, divide, multiply, subtract
 from .functions.helper import get_tool_schema
@@ -63,5 +61,5 @@ def get_tool_list():
 @shared_task()
 def ai_agent_handle(question):
     response = ai_agent.chat(question)
-    logging.info(f"Agent response: {response}")
+    logger.info(f"Agent response: {response}")
     return response.response
