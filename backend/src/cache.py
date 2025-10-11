@@ -14,7 +14,6 @@ def get_redis_client(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
     try:
         client = redis.Redis(host=host, port=port, db=db)
         client.ping()
-        logger.info(f"Connected to Redis successfully at {host}:{port}, DB: {db}")
         return client
     except Exception as e:
         logger.error(f"Error connecting to Redis: {e}")
@@ -28,12 +27,11 @@ def get_conversation_id(bot_id, user_id, ttl_seconds=360):
 
         if client.exists(key):
             client.expire(key, ttl_seconds)  # Refresh TTL
-            logger.info(f"Existing conversation ID found for {key}, TTL refreshed.")
             return client.get(key).decode("utf-8")
         else:
             conversation_id = generate_request_id()
             client.set(key, conversation_id, ex=ttl_seconds)
-            logger.info(f"New conversation ID created for {key}: {conversation_id}")
+            logger.info(f"New conversation started: {key} → {conversation_id}")
             return conversation_id
     except Exception as e:
         logger.error(f"Error managing conversation ID in Redis: {e}")

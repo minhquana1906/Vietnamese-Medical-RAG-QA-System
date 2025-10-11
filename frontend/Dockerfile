@@ -4,11 +4,13 @@ ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 
-COPY uv.lock pyproject.toml ./
+# Copy dependency files từ root project
+COPY uv.lock pyproject.toml README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-dev --group frontend
 
-COPY . .
+# Copy source code frontend
+COPY frontend/ ./frontend/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --group frontend
 
@@ -20,10 +22,10 @@ RUN groupadd --gid 1000 app && \
 
 COPY --from=builder --chown=app:app /app /app
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 ENV PATH="/app/.venv/bin:$PATH"
 
 USER app
 
-CMD ["streamlit", "run", "frontend/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]

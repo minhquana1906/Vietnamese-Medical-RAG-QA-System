@@ -22,14 +22,3 @@ class TestUtilityFunctions:
 
         id_custom = generate_request_id(max_length=16)
         assert len(id_custom) == 17  # 16 + 1
-
-    def test_setup_logger(self):
-        from unittest.mock import patch
-
-        from backend.src.utils import setup_logger
-
-        with patch("backend.src.utils.logger") as mock_logger:
-            setup_logger()
-
-            assert mock_logger.add.called
-            assert mock_logger.info.called

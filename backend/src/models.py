@@ -5,8 +5,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from .cache import get_conversation_id
-from .config import SYSTEM_PROMPT
+from .config import get_backend_settings
 from .database import engine, get_db
+
+settings = get_backend_settings()
 
 
 class Base(DeclarativeBase):
@@ -69,7 +71,6 @@ def get_conversation_by_id(conversation_id):
         conversations = db.execute(stmt).scalars().all()
         # return rows with the same conversation's id. Each contains a message in the conversation
         if conversations:
-            logger.info(f"Fetched conversation with ID: {conversation_id}")
             return conversations
         else:
             logger.warning(f"No conversation found with ID: {conversation_id}")
@@ -91,22 +92,16 @@ def update_conversation(bot_id, user_id, message, is_request=True):
             db.add(new_conversation)
             db.commit()
             db.refresh(new_conversation)
-            logger.info(
-                f"Inserted new message to conversation with ID: {conversation_id}"
-            )
             return conversation_id
 
 
 def convert_conversation_to_messages(conversation):
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": settings.system_prompt}]
 
     for msg in conversation:
         role = "user" if msg.is_request else "assistant"
         messages.append({"role": role, "content": msg.message})
 
-    logger.info(
-        f"Constructed messages for conversation ID: {conversation[0].id if conversation else 'N/A'}"
-    )
     return messages
 
 
@@ -114,8 +109,6 @@ def get_messages_from_conversation(conversation_id):
     conversation = get_conversation_by_id(conversation_id)
     if conversation:
         return convert_conversation_to_messages(conversation)
-    else:
-        return [{"role": "system", "content": SYSTEM_PROMPT}]
 
 
 # document's CRUD operations

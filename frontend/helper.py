@@ -2,10 +2,11 @@ import json
 import time
 
 import requests
-from config import BOT_ID, CHAT_COMPLETE_ENDPOINT, USER_ID
 from loguru import logger
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
+
+CHAT_COMPLETE_ENDPOINT = "http://chatbot_api:8000/chat/complete"
 
 
 @retry(
@@ -15,8 +16,8 @@ from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
 )
 def send_user_message(query):
     payload = {
-        "bot_id": BOT_ID,
-        "user_id": USER_ID,
+        "bot_id": "Meddy",
+        "user_id": "user_1",
         "user_message": query,
         "is_sync_request": False,
         "metadata": {"source": "web_app"},
@@ -85,13 +86,27 @@ def simulate_streaming(text, delay=0.05):
     if not text or not isinstance(text, str):
         return
 
-    words = text.split()
-    for i, word in enumerate(words):
-        if i == 0:
-            yield word
+    # Split by space only, preserving newlines
+    current_word = ""
+    for char in text:
+        if char == " ":
+            if current_word:
+                yield current_word
+                current_word = ""
+            yield " "
+            time.sleep(delay)
+        elif char == "\n":
+            if current_word:
+                yield current_word
+                current_word = ""
+            yield "\n"
+            time.sleep(delay)
         else:
-            yield f" {word}"
-        time.sleep(delay)
+            current_word += char
+
+    # Yield the last word if any
+    if current_word:
+        yield current_word
 
 
 def streaming_response_generator(query):
