@@ -43,7 +43,6 @@ def client():
     with (
         patch("backend.src.models.init_db"),
         patch("backend.src.vectorize.create_collection"),
-        patch("backend.src.main.setup_logger"),
     ):
         from backend.src.main import app
 

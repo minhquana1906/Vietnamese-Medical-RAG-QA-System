@@ -1,0 +1,21 @@
+services:
+  postgres_db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - medical_rag_qa_network
+
+volumes:
+  postgres_data:
+
+networks:
+  medical_rag_qa_network:
+    external: true

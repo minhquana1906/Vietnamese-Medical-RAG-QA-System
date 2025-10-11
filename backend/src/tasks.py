@@ -3,7 +3,9 @@ import uuid
 from celery import shared_task
 from loguru import logger
 
-from .brain import (format_context, openai_chat_complete,
+from .agent import ai_agent_handle
+from .brain import (detect_route, enhance_query_quality,
+                    get_tavily_agent_answer, openai_chat_complete,
                     openai_generate_embedding)
 from .chunking import dynamic_chunking
 from .config import get_backend_settings
@@ -51,21 +53,24 @@ def chunk_and_index_document(doc_id, title, content):
         raise
 
 
+@shared_task()
+def bot_route_answer_message(history, question):
+    # detect the route
+    route = detect_route(history, question)
+    logger.info(f"Bot route: {route}")
+    if route == "medical":
+        return rag_qa_task(history, question)
+    elif route == "general":
+        return ai_agent_handle(question)
+
+
 @shared_task
 def rag_qa_task(history, question):
-    """
-    RAG QA task: Retrieve documents, rerank, and generate answer.
-
-    Logging strategy:
-    - Log retrieval metrics (doc count - CRITICAL)
-    - Log rerank results (CRITICAL for quality)
-    - Skip embedding/context logs (too verbose)
-    - Log final response (IMPORTANT for monitoring)
-    """
     try:
+        new_question = enhance_query_quality(history, question)
         # Generate embedding for question
         question_embedding = openai_generate_embedding(
-            question, model=settings.openai_embedding_model
+            new_question, model=settings.openai_embedding_model
         )
 
         # Retrieve top-k most relevant documents
@@ -77,10 +82,23 @@ def rag_qa_task(history, question):
         logger.info(f"Retrieved {len(relevant_docs)} documents from vector DB")
 
         # rerank
-        reranked_docs = rerank_documents(question, relevant_docs)
+        reranked_docs, rerank_context = rerank_documents(new_question, relevant_docs)
 
-        # Format context from relevant documents
-        formatted_context = format_context(reranked_docs)
+        # Check if RAG results have sufficient confidence. If best score is too low, use web search
+        use_web_search = False
+        if not reranked_docs or (
+            reranked_docs and reranked_docs[0].relevance_score < 0.5
+        ):
+            logger.info(
+                f"RAG confidence low (best score: {reranked_docs[0].relevance_score if reranked_docs else 0}), will use web search as fallback"
+            )
+            use_web_search = True
+
+        formatted_context = (
+            rerank_context
+            if reranked_docs
+            else "Can't find relevant documents from knowledge base."
+        )
 
         # Build the message chain
         messages = [{"role": "system", "content": settings.system_prompt}]
@@ -89,38 +107,41 @@ def rag_qa_task(history, question):
         for msg in history:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Add the user's question to the message chain
-        messages.append(
-            {
-                "role": "user",
-                "content": settings.rag_prompt.format(
-                    context=formatted_context, question=question
-                ),
-            }
-        )
+        if use_web_search:
+            # Use web search with Tavily agent
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"RAG Context (can be insufficient):\n{formatted_context}\n\nQuestion: {new_question}\n\nNote: Information in RAG context may be insufficient. Please search for additional information from the internet and ALWAYS provide the source with the full URL.",
+                }
+            )
 
-        response = openai_chat_complete(
-            messages=messages, temperature=0.1, max_tokens=2048
-        )
-        logger.info(f"✓ RAG response generated successfully")
+            response = get_tavily_agent_answer(messages)
+            logger.info("Response generated with web search fallback")
+        else:
+            # Use standard RAG response
+            messages.append(
+                {
+                    "role": "user",
+                    "content": settings.rag_prompt.format(
+                        context=formatted_context, question=new_question
+                    ),
+                }
+            )
+            response = openai_chat_complete(
+                messages=messages, temperature=0.7, max_tokens=2048
+            )
+            logger.info("RAG response generated successfully")
+
         return response
 
     except Exception as e:
         logger.error(f"Error in RAG QA task: {e}")
-        return "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
+        raise
 
 
 @shared_task
 def message_handler_task(bot_id, user_id, query):
-    """
-    Main message handler task.
-
-    Logging strategy:
-    - Start/End events (CRITICAL for tracing)
-    - Conversation ID (IMPORTANT for debugging)
-    - Message count (USEFUL metric)
-    - Errors (CRITICAL)
-    """
     logger.info(f"▶ Message handler started: {bot_id}/{user_id}")
 
     try:
@@ -133,11 +154,10 @@ def message_handler_task(bot_id, user_id, query):
             f"Conversation {conversation_id}: {len(messages)} messages in history"
         )
 
+        history = messages[:-1]
         # Get answer from RAG
-        answer = rag_qa_task(messages[:-1], query)
-        logger.info(
-            f"Generated RAG response for conversation {conversation_id}:\n{answer}"
-        )
+        answer = bot_route_answer_message(history, query)
+        logger.info(f"Generated response for conversation {conversation_id}:\n{answer}")
 
         # Summarize and save the response
         summarized_answer = get_summarized_content(answer)

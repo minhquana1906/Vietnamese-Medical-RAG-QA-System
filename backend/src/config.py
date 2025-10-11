@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from .template import RAG_PROMPT, SYSTEM_PROMPT
+from .template import (INTENT_DETECTION_PROMPT, RAG_PROMPT,
+                       REWRITE_USER_PROMPT, SYSTEM_PROMPT)
 
 load_dotenv()
 
@@ -35,8 +36,17 @@ class BackendSettings(BaseSettings):
     openai_embedding_model: str = Field(default="text-embedding-3-small")
     cohere_rerank_model: str = Field(default="rerank-multilingual-v3.0")
 
+    # Qwen3 models
+    qwen3_llm: str = Field(default="Qwen/Qwen3-0.6B")
+    qwen3_embedding_model: str = Field(default="Qwen/Qwen3-Embedding-0.6B")
+    qwen3_rerank_model: str = Field(default="Qwen/Qwen3-Reranker-0.6B")
+
+    # Prompt templates
     system_prompt: str = Field(default=SYSTEM_PROMPT)
     rag_prompt: str = Field(default=RAG_PROMPT)
+    rewrite_prompt: str = Field(default=REWRITE_USER_PROMPT)
+    intent_detection_prompt: str = Field(default=INTENT_DETECTION_PROMPT)
+
     temperature: float = Field(default=0.7)
     max_tokens: int = Field(default=2048)
 
@@ -69,11 +79,11 @@ class DatabaseSettings(BaseSettings):
         )
 
 
-@lru_cache()
+@lru_cache
 def get_backend_settings() -> BackendSettings:
     return BackendSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_database_settings() -> DatabaseSettings:
     return DatabaseSettings()

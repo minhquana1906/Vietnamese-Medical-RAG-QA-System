@@ -109,8 +109,6 @@ def get_messages_from_conversation(conversation_id):
     conversation = get_conversation_by_id(conversation_id)
     if conversation:
         return convert_conversation_to_messages(conversation)
-    else:
-        return [{"role": "system", "content": settings.system_prompt}]
 
 
 # document's CRUD operations

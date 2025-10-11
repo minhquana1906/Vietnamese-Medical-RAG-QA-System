@@ -1,6 +1,7 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 ENV UV_PYTHON_DOWNLOADS=0
+ENV UV_HTTP_TIMEOUT=600
 
 WORKDIR /app
 
@@ -19,6 +20,7 @@ RUN groupadd --gid 1000 app && \
     useradd --uid 1000 --gid app --shell /bin/bash --create-home app
 
 COPY --from=builder --chown=app:app /app /app
+
 
 RUN mkdir /app/nltk_data && \
     chown -R app:app /app/nltk_data

@@ -9,10 +9,8 @@ from .config import get_backend_settings
 from .models import init_db, insert_document
 from .schema import CompleteRequest
 from .tasks import chunk_and_index_document, message_handler_task
-from .utils import setup_logger
 from .vectorize import create_collection
 
-setup_logger()
 settings = get_backend_settings()
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)

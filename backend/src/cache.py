@@ -11,16 +11,9 @@ REDIS_DB = int(os.getenv("REDIS_DB", 0))
 
 
 def get_redis_client(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
-    """
-    Get Redis client instance.
-
-    Note: Connection logging removed to reduce verbosity.
-    Only errors are logged.
-    """
     try:
         client = redis.Redis(host=host, port=port, db=db)
         client.ping()
-        # Removed: Connection success log (too frequent)
         return client
     except Exception as e:
         logger.error(f"Error connecting to Redis: {e}")
@@ -28,19 +21,12 @@ def get_redis_client(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
 
 
 def get_conversation_id(bot_id, user_id, ttl_seconds=360):
-    """
-    Get or create conversation ID for a user session.
-
-    Note: Only logs new conversation creation (important event).
-    Existing conversation refresh is not logged (too frequent).
-    """
     key = f"{bot_id}.{user_id}"
     try:
         client = get_redis_client()
 
         if client.exists(key):
             client.expire(key, ttl_seconds)  # Refresh TTL
-            # Removed: TTL refresh log (too frequent, not critical)
             return client.get(key).decode("utf-8")
         else:
             conversation_id = generate_request_id()
