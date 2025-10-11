@@ -9,6 +9,8 @@ services:
       - "8501:8501"
     expose:
       - 8501
+    volumes:
+      - .:/app/frontend
     networks:
       - medical_rag_qa_network
 

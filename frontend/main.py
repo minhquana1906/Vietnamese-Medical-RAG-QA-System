@@ -34,15 +34,17 @@ if prompt := st.chat_input("Tôi có thể giúp gì cho bạn?"):
                     continue
 
                 full_response += chunk
-                message_placeholder.markdown(full_response + " ")
+                # Display with cursor during streaming
+                message_placeholder.markdown(full_response + "▌")
 
+            # Final display without cursor
             message_placeholder.markdown(full_response)
 
             if full_response.strip():
                 st.session_state.messages.append(
                     {"role": "assistant", "content": full_response}
                 )
-        except Exception as e:
+        except Exception:
             error_message = "❌ Đã xảy ra lỗi khi xử lý yêu cầu. Vui lòng thử lại."
             message_placeholder.markdown(error_message)
             st.session_state.messages.append(

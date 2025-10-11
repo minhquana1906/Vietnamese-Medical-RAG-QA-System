@@ -17,8 +17,7 @@ services:
     restart: always
     ports:
       - "6379:6379"
-    command:
-      - "--save 60 1"
+    command: ["redis-server", "--save", "180", "1", "--loglevel", "warning"]
     volumes:
       - valkey_data:/data
     networks:
@@ -55,7 +54,8 @@ services:
     depends_on:
       - valkey_db
       - chatbot_api
-    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R app:app /app/logs/worker && celery -A src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log"
+    user: root
+    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R 1000:1000 /app/logs/worker && su app -c 'celery -A src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log'"
     volumes:
       - .:/app/backend
       - worker_volume:/app/logs/worker

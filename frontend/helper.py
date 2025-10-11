@@ -86,13 +86,27 @@ def simulate_streaming(text, delay=0.05):
     if not text or not isinstance(text, str):
         return
 
-    words = text.split()
-    for i, word in enumerate(words):
-        if i == 0:
-            yield word
+    # Split by space only, preserving newlines
+    current_word = ""
+    for char in text:
+        if char == " ":
+            if current_word:
+                yield current_word
+                current_word = ""
+            yield " "
+            time.sleep(delay)
+        elif char == "\n":
+            if current_word:
+                yield current_word
+                current_word = ""
+            yield "\n"
+            time.sleep(delay)
         else:
-            yield f" {word}"
-        time.sleep(delay)
+            current_word += char
+
+    # Yield the last word if any
+    if current_word:
+        yield current_word
 
 
 def streaming_response_generator(query):

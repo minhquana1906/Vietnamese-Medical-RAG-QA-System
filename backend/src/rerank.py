@@ -19,7 +19,7 @@ def get_cohere_client():
         raise
 
 
-def rerank_documents(query, documents, model=settings.cohere_rerank_model, top_n=5):
+def rerank_documents(query, documents, model=settings.cohere_rerank_model, top_n=3):
     try:
         client = get_cohere_client()
         yaml_docs = [yaml.dump(doc, sort_keys=False) for doc in documents]
@@ -27,17 +27,17 @@ def rerank_documents(query, documents, model=settings.cohere_rerank_model, top_n
         reranked_documents = client.rerank(
             query=query, documents=yaml_docs, model=model, top_n=top_n
         ).results
+        logger.debug(f"Reranked documents: {reranked_documents}")
 
-        # Log reranked results in compact format
-        rerank_summary = ", ".join(
+        rerank_context = "\n\n".join(
             [
-                f"#{rank} (score={doc.relevance_score:.3f})"
+                f"#Rank {rank} (Relevance Score = {doc.relevance_score:.3f}):\nTitle: {documents[doc.index]['title']}\nContent: {documents[doc.index]['content']}"
                 for rank, doc in enumerate(reranked_documents, start=1)
             ]
         )
-        logger.info(f"Reranked {len(reranked_documents)} docs: {rerank_summary}")
+        logger.info(f"Reranked {len(reranked_documents)} docs: {rerank_context}")
 
-        return reranked_documents
+        return reranked_documents, rerank_context
     except Exception as e:
         logger.error(f"Error reranking documents: {e}")
         raise
