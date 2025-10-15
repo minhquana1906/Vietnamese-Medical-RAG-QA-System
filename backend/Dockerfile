@@ -7,11 +7,12 @@ WORKDIR /app
 
 COPY uv.lock pyproject.toml README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-dev --group backend
+    uv sync --locked --no-install-project --group backend --group dev
 
 COPY backend/ ./backend/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --group backend
+    uv sync --locked --group backend --group dev
+
 
 # ======================================================================================
 FROM python:3.12-slim-bookworm AS runtime

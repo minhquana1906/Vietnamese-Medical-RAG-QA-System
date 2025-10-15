@@ -25,6 +25,10 @@ runs:
         version: ${{ inputs.uv-version }}
         enable-cache: true
 
+    - name: Ensure working directory is repo root
+      shell: bash
+      run: cd "${GITHUB_WORKSPACE}"
+
     - name: Install dependencies
       shell: bash
-      run: uv sync --all-groups
+      run: uv sync --all-groups --dev

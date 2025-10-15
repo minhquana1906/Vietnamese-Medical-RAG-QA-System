@@ -1,0 +1,22 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python-env
+
+      - name: Run pre-commit hooks
+        run: uv run pre-commit run --all-files
+
+      - name: Type checking with mypy
+        run: uv run mypy backend/src
