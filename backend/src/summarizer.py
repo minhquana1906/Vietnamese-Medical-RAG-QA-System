@@ -8,17 +8,15 @@ def get_summarized_content(text):
         messages = [
             {
                 "role": "system",
-                "content": "Bạn là một trợ lý AI giúp tóm tắt nội dung các cuộc trò chuyện. Hãy tóm tắt ngắn gọn nhưng phải luôn giữ đầy đủ ý chính của cuộc trò chuyện.",
+                "content": "You are an AI assistant in summarizing conversations. Your task is to provide concise summaries that capture the main points of the conversation while retaining all essential information.",
             },
             {
                 "role": "user",
-                "content": f"## Nội dung hội thoại\n: {text}\n\nOutput:",
+                "content": f"Conversation Content:\n:{text}\n\nOutput:\n",
             },
         ]
 
-        llm_response = openai_chat_complete(messages, temperature=0.5, max_tokens=512)
-        logger.info(f"Summarized text: {llm_response}")
-        return llm_response
+        return openai_chat_complete(messages, temperature=0.5, max_tokens=512)
     except Exception as e:
         logger.error(f"Error summarizing text: {e}")
         raise

@@ -1,18 +1,4 @@
 services:
-  postgres_db:
-    image: postgres:15
-    container_name: postgres_db
-    restart: always
-    ports:
-      - "5432:5432"
-    env_file:
-      - backend/.env
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - medical_rag_qa_network
-
   qdrant_db:
     image: qdrant/qdrant:v1.15.1
     container_name: qdrant_db
@@ -20,7 +6,6 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
@@ -32,8 +17,7 @@ services:
     restart: always
     ports:
       - "6379:6379"
-    command:
-      - "--save 60 1"
+    command: ["redis-server", "--save", "180", "1", "--loglevel", "warning"]
     volumes:
       - valkey_data:/data
     networks:
@@ -41,38 +25,39 @@ services:
 
   chatbot_api:
     build:
-      context: .
-      dockerfile: ./backend/Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: chatbot_api
     restart: always
     ports:
       - "8000:8000"
-    command: /bin/bash -c "python backend/scripts/init_nltk.py && uvicorn backend.src.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info"
+    command: /bin/bash -c "python scripts/init_nltk.py && uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info"
     env_file:
-      - backend/.env
+      - .env
     depends_on:
-      - postgres_db
       - qdrant_db
       - valkey_db
     volumes:
       - nltk_data:/app/nltk_data
+      - .:/app/backend
     networks:
       - medical_rag_qa_network
 
   chatbot_worker:
     build:
-      context: .
-      dockerfile: ./backend/Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: chatbot_worker
     restart: always
     env_file:
-      - backend/.env
+      - .env
     depends_on:
       - valkey_db
       - chatbot_api
-    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R app:app /app/logs/worker && celery -A backend.src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log"
+    user: root
+    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R 1000:1000 /app/logs/worker && su app -c 'celery -A src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log'"
     volumes:
-      - ./backend/:/usr/src/app
+      - .:/app/backend
       - worker_volume:/app/logs/worker
       - nltk_data:/app/nltk_data
     networks:
@@ -80,10 +65,9 @@ services:
 
 networks:
   medical_rag_qa_network:
-    driver: bridge
+    external: true
 
 volumes:
-  postgres_data:
   qdrant_data:
   valkey_data:
   worker_volume:
