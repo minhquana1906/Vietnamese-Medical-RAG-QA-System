@@ -1,18 +1,13 @@
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-ENV UV_PYTHON_DOWNLOADS=0
+
+FROM python:3.12-slim-bookworm AS builder
 
 WORKDIR /app
 
-# Copy dependency files từ root project
-COPY uv.lock pyproject.toml README.md ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-dev --group frontend
+COPY frontend/requirements.txt ./
 
-# Copy source code frontend
-COPY frontend/ ./frontend/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --group frontend
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY frontend/. .
 
 # ======================================================================================
 FROM python:3.12-slim-bookworm AS runtime
@@ -22,10 +17,13 @@ RUN groupadd --gid 1000 app && \
 
 COPY --from=builder --chown=app:app /app /app
 
-WORKDIR /app/frontend
+WORKDIR /app
 
-ENV PATH="/app/.venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
+
 
 USER app
 
-CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+EXPOSE 8501
+
+CMD ["chainlit", "run", "main.py", "--port", "8501", "--host", "0.0.0.0"]

@@ -1,3 +1,7 @@
 tenacity
-streamlit==1.36.0
 requests==2.32.3
+chainlit==2.0.0
+loguru
+aiohttp
+sqlalchemy
+asyncpg
