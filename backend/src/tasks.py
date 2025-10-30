@@ -3,17 +3,17 @@ import uuid
 from celery import shared_task
 from loguru import logger
 
-from .agent import ai_agent_handle
-from .brain import (detect_route, enhance_query_quality,
-                    get_tavily_agent_answer, openai_chat_complete,
-                    openai_generate_embedding)
-from .chunking import dynamic_chunking
-from .config import get_backend_settings
-from .database import get_celery_app
+from .configs.celery_config import get_celery_app
+from .configs.setup import get_backend_settings
+from .core.vectorize import search_vectors, upsert_points
 from .models import get_messages_from_conversation, update_conversation
-from .rerank import rerank_documents
-from .summarizer import get_summarized_content
-from .vectorize import search_vectors, upsert_points
+from .services.agent import ai_agent_handle
+from .services.brain import (detect_route, enhance_query_quality,
+                             get_tavily_agent_answer, openai_chat_complete,
+                             openai_generate_embedding)
+from .services.chunking import dynamic_chunking
+from .services.rerank import rerank_documents
+from .services.summarizer import get_summarized_content
 
 settings = get_backend_settings()
 
@@ -82,7 +82,12 @@ def rag_qa_task(history, question):
         logger.info(f"Retrieved {len(relevant_docs)} documents from vector DB")
 
         # rerank
-        reranked_docs, rerank_context = rerank_documents(new_question, relevant_docs)
+        if relevant_docs:
+            reranked_docs, rerank_context = rerank_documents(
+                new_question, relevant_docs
+            )
+        else:
+            reranked_docs, rerank_context = None, None
 
         # Check if RAG results have sufficient confidence. If best score is too low, use web search
         use_web_search = False
@@ -142,7 +147,7 @@ def rag_qa_task(history, question):
 
 @shared_task
 def message_handler_task(bot_id, user_id, query):
-    logger.info(f"▶ Message handler started: {bot_id}/{user_id}")
+    logger.info(f"Message handler started: {bot_id}/{user_id}")
 
     try:
         # Add query message to db (mark as request)

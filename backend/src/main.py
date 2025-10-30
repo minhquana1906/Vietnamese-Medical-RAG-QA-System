@@ -5,11 +5,11 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 
-from .config import get_backend_settings
+from .configs.setup import get_backend_settings
+from .core.vectorize import create_collection
 from .models import init_db, insert_document
-from .schema import CompleteRequest
+from .schemas.schema import CompleteRequest
 from .tasks import chunk_and_index_document, message_handler_task
-from .vectorize import create_collection
 
 settings = get_backend_settings()
 

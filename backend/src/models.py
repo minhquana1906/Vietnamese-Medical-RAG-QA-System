@@ -1,18 +1,17 @@
 from loguru import logger
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.ext.declarative import DeclarativeMeta, declarative_base
 from sqlalchemy.future import select
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
-from .cache import get_conversation_id
-from .config import get_backend_settings
+from .configs.setup import get_backend_settings
+from .core.cache import get_conversation_id
 from .database import engine, get_db
 
 settings = get_backend_settings()
 
 
-class Base(DeclarativeBase):
-    pass
+Base: DeclarativeMeta = declarative_base()
 
 
 def init_db():
@@ -27,21 +26,15 @@ def init_db():
 class ChatConversation(Base):
     __tablename__ = "chat_conversations"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, index=True, autoincrement=True
-    )
-    conversation_id: Mapped[str] = mapped_column(
-        String(100), nullable=False, default=""
-    )
-    bot_id: Mapped[str] = mapped_column(String(100), nullable=False, default="Meddy")
-    user_id: Mapped[str] = mapped_column(String(100), nullable=False, default="user_1")
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    is_request: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[DateTime] = mapped_column(
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    conversation_id = Column(String(100), nullable=False, default="")
+    bot_id = Column(String(100), nullable=False, default="Meddy")
+    user_id = Column(String(100), nullable=False, default="user_1")
+    message = Column(Text, nullable=False)
+    is_request = Column(Boolean, nullable=False, default=True)
+    is_completed = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
@@ -49,13 +42,11 @@ class ChatConversation(Base):
 class Document(Base):
     __tablename__ = "documents"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[DateTime] = mapped_column(
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 

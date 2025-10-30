@@ -14,7 +14,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "llama-index-embeddings-huggingface>=0.2.3",
 ]
 
 [project.urls]
@@ -37,7 +36,7 @@ backend = [
     "alembic>=1.16.5",
     "celery==5.4.0",
     "cohere>=5.18.0",
-    "databases==0.9.0",
+    "databases==0.8.0",
     "dotenv>=0.9.9",
     "fastapi==0.112.2",
     "function-schema>=0.4.5",
@@ -54,7 +53,7 @@ backend = [
     "pyyaml>=6.0.2",
     "qdrant-client==1.10.1",
     "redis==5.0.7",
-    "sqlalchemy==2.0.32",
+    "sqlalchemy==1.4.54",
     "tavily-python>=0.7.12",
     "types-pyyaml>=6.0.12.20250915",
     "uvicorn==0.30.6",
