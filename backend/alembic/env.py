@@ -10,7 +10,7 @@ config = context.config
 
 config.set_main_option(
     "sqlalchemy.url",
-    "postgresql://postgres_admin:postgres_password@localhost:5432/chat_conversation_db",
+    "postgresql://postgresadmin:postgresadmin@localhost:5432/medical_rag_db",
 )
 
 # Interpret the config file for Python logging.
