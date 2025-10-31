@@ -1,0 +1,51 @@
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm_server
+    restart: always
+    ports:
+      - "8001:8000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - ${MODEL_PATH:-./models/qwen3/generation}:/models
+      - vllm_cache:/root/.cache/huggingface
+    command:
+      - --model
+      - /models
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --tensor-parallel-size
+      - "1"
+      - --dtype
+      - float16
+      - --max-model-len
+      - "8192"
+      - --gpu-memory-utilization
+      - "0.7"
+      - --enable-lora
+      - --trust-remote-code
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - medical_rag_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  medical_rag_network:
+    external: true
+
+volumes:
+  vllm_cache:

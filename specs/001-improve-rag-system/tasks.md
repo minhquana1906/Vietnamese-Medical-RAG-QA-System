@@ -20,20 +20,20 @@
 
 **Purpose**: Project initialization and new infrastructure setup
 
-- [ ] T001 Create new directory structure per plan.md (ml/, serving/, monitoring/, testing/, frontend/components/)
-- [ ] T002 [P] Update backend/docker-compose.yml to include Elasticsearch 8.11.0 service
-- [ ] T003 [P] Create monitoring/docker-compose.yml for Prometheus, Loki, Tempo, Promtail, Grafana
-- [ ] T004 [P] Create serving/vllm/docker-compose.yml for vLLM generation model serving
-- [ ] T005 [P] Create serving/triton/docker-compose.yml for Triton inference server
-- [ ] T006 [P] Create .env.example with all required environment variables (HF_TOKEN, WANDB_API_KEY, JWT_SECRET, etc.)
-- [ ] T007 [P] Update backend/requirements.txt with new dependencies (chainlit, elasticsearch, prometheus-client, opentelemetry-api)
-- [ ] T008 [P] Create ml/requirements.txt with fine-tuning dependencies (peft, bitsandbytes, wandb, datasets)
-- [ ] T009 [P] Create serving/triton/models directory structure for qwen3_embedding, qwen3_reranker, qwen3_guard
-- [ ] T010 [P] Create monitoring/grafana/dashboards/ directory with placeholder files
-- [ ] T011 [P] Create monitoring/prometheus/prometheus.yml configuration
-- [ ] T012 [P] Create monitoring/loki/loki-config.yaml configuration
-- [ ] T013 [P] Create monitoring/tempo/tempo-config.yaml configuration
-- [ ] T014 [P] Create testing/locustfile.py skeleton for load testing
+- [X] T001 Create new directory structure per plan.md (ml/, serving/, monitoring/, testing/, frontend/components/)
+- [X] T002 [P] Update backend/docker-compose.yml to include Elasticsearch 8.11.0 service
+- [X] T003 [P] Create monitoring/docker-compose.yml for Prometheus, Loki, Tempo, Promtail, Grafana
+- [X] T004 [P] Create serving/vllm/docker-compose.yml for vLLM generation model serving
+- [X] T005 [P] Create serving/triton/docker-compose.yml for Triton inference server
+- [X] T006 [P] Create .env.example with all required environment variables (HF_TOKEN, WANDB_API_KEY, JWT_SECRET, etc.)
+- [X] T007 [P] Update backend/requirements.txt with new dependencies (chainlit, elasticsearch, prometheus-client, opentelemetry-api)
+- [X] T008 [P] Create ml/requirements.txt with fine-tuning dependencies (peft, bitsandbytes, wandb, datasets)
+- [X] T009 [P] Create serving/triton/models directory structure for qwen3_embedding, qwen3_reranker, qwen3_guard
+- [X] T010 [P] Create monitoring/grafana/dashboards/ directory with placeholder files
+- [X] T011 [P] Create monitoring/prometheus.yml configuration
+- [X] T012 [P] Create monitoring/loki/loki-config.yaml configuration
+- [X] T013 [P] Create monitoring/tempo/tempo-config.yaml configuration
+- [X] T014 [P] Create testing/locustfile.py skeleton for load testing
 
 **Git Example**: `git commit -m "Add infrastructure configuration for monitoring and model serving"`
 

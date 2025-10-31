@@ -1,0 +1,14 @@
+{
+  "dashboard": {
+    "title": "Model Serving Metrics",
+    "tags": [
+      "vllm",
+      "triton",
+      "models"
+    ],
+    "timezone": "browser",
+    "panels": [],
+    "schemaVersion": 16,
+    "version": 0
+  }
+}

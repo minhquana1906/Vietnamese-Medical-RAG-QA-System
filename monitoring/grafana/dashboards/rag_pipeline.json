@@ -1,0 +1,13 @@
+{
+  "dashboard": {
+    "title": "RAG Pipeline Metrics",
+    "tags": [
+      "rag",
+      "medical"
+    ],
+    "timezone": "browser",
+    "panels": [],
+    "schemaVersion": 16,
+    "version": 0
+  }
+}
