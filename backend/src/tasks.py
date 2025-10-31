@@ -84,9 +84,7 @@ def rag_qa_task(history, question):
 
         # rerank
         if relevant_docs:
-            reranked_docs, rerank_context = cohere_rerank(
-                new_question, relevant_docs
-            )
+            reranked_docs, rerank_context = cohere_rerank(new_question, relevant_docs)
         else:
             reranked_docs, rerank_context = None, None
 
