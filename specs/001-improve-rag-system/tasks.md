@@ -61,6 +61,8 @@
 - [ ] T028 [P] Configure Loguru with JSON formatter in backend/src/configs/logging_config.py
 - [ ] T029 Create backend/scripts/migrate_conversations.py for migrating old conversation data to Chainlit schema
 - [ ] T030 Run Alembic migration to create new database schema: `alembic upgrade head`
+- [ ] T030a Execute backend/scripts/migrate_conversations.py to migrate existing conversations (if any detected in old schema)
+- [ ] T030b [P] Add health check endpoints in backend/src/main.py: GET /health (API status), GET /health/db (database connectivity), GET /health/cache (Redis connectivity)
 
 **Git Example**: `git commit -m "Implement core authentication and database schema for user management"`
 
@@ -139,10 +141,13 @@
 - [ ] T076 [US2] Update backend/src/services/brain.py to dynamically load deployed generation model from database
 - [ ] T077 [US2] Update backend/src/services/embedding.py to use deployed embedding model from Triton
 - [ ] T078 [US2] Update backend/src/services/rerank.py to use deployed reranker from Triton
+- [ ] T078a [P] [US2] Create guardrails test dataset with sample inappropriate queries in ml/data/guardrails_test.jsonl (e.g., harmful, off-topic, privacy-violating questions)
+- [ ] T078b [US2] Evaluate Qwen3Guard model for false positive rate <2% per SC-008 using ml/scripts/evaluate_guardrails.py
+- [ ] T078c [US2] Integrate guardrails validation into backend/src/core/guardrails.py with logging for filtered queries
 
 **Git Example**: `git commit -m "Complete fine-tuning pipeline for generation model with 4.2% improvement over baseline"`
 
-**Checkpoint**: At this point, fine-tuned models are trained, evaluated, and serving via vLLM/Triton
+**Checkpoint**: At this point, fine-tuned models are trained, evaluated, and serving via vLLM/Triton with guardrails validation
 
 ---
 
@@ -162,7 +167,7 @@
 - [ ] T084 [P] [US3] Add search type metrics to Prometheus instrumentation (rag_search_requests_total{search_type="vector|keyword|hybrid"})
 - [ ] T085 [P] [US3] Update caching layer in backend/src/core/cache.py to cache hybrid search results with key prefix "search:hybrid:"
 - [ ] T086 [US3] Configure Elasticsearch index mapping in database/init.sql with Vietnamese analyzer settings
-- [ ] T087 [US3] Update document chunking in backend/src/services/chunking.py to use fixed semantic strategy with sentence boundaries
+- [ ] T087 [US3] Update document chunking in backend/src/services/chunking.py to implement **single fixed semantic strategy** across all document types with sentence boundary awareness (512 token limit, 50 token overlap)
 - [ ] T088 [US3] Update chunk indexing to write to both Qdrant and Elasticsearch in backend/src/tasks.py
 
 **Git Example**: `git commit -m "Implement hybrid search with RRF fusion showing 18% improvement in precision@10"`
@@ -184,7 +189,9 @@
 - [ ] T091 [P] [US4] Implement document management endpoints in backend/src/main.py: GET /documents, POST /documents, GET /documents/{document_id}, DELETE /documents/{document_id} per documents-api.yaml
 - [ ] T092 [P] [US4] Implement reindex endpoint in backend/src/main.py: POST /indexing/reindex-document/{document_id} per documents-api.yaml
 - [ ] T093 [US4] Create chunk_and_index_document Celery task in backend/src/tasks.py for async document processing
+- [ ] T093a [P] [US4] Create baseline chunking measurement script in ml/scripts/measure_chunking_baseline.py to capture current overlap/duplicate metrics before implementing new strategy
 - [ ] T094 [US4] Enhance chunking strategy in backend/src/services/chunking.py with improved semantic awareness (respect sentence boundaries, 512 token limit, 50 token overlap)
+- [ ] T094a [P] [US4] Create chunking evaluation script in ml/scripts/evaluate_chunking.py to measure 30% reduction in duplicate information per SC-018
 - [ ] T095 [US4] Update chunk metadata in backend/src/models.py to include source_document_id, chunk_index, section_title, page_number
 - [ ] T096 [US4] Implement batch embedding generation in backend/src/services/embedding.py for efficient processing
 - [ ] T097 [US4] Update Qdrant insertion in backend/src/core/vectorize.py to include enhanced metadata in payload
@@ -193,6 +200,8 @@
 - [ ] T100 [US4] Run backend/scripts/load_dataset.py to download combined_medical_dataset from HuggingFace
 - [ ] T101 [US4] Execute POST /indexing/ingest-dataset to index combined_medical_dataset into Qdrant and Elasticsearch
 - [ ] T102 [US4] Verify all documents indexed successfully with metadata completeness check
+- [ ] T102a [P] [US4] Implement incremental dataset update logic in backend/src/tasks.py to handle document updates without full reindex (check document hash, update only changed documents)
+- [ ] T102b [P] [US4] Add dataset version tracking in backend/src/models.py to support incremental updates per FR-026
 
 **Git Example**: `git commit -m "Add dataset ingestion pipeline with enhanced metadata tracking and chunk management"`
 
@@ -211,7 +220,8 @@
 - [ ] T103 [P] [US5] Implement embedding caching in backend/src/services/embedding.py (check cache before generating, cache after generation)
 - [ ] T104 [P] [US5] Implement search result caching in backend/src/core/hybrid_search.py (cache final RRF results)
 - [ ] T105 [US5] Add cache hit/miss metrics in backend/src/core/cache.py with Prometheus counters (cache_hits_total{cache_type="embedding|search"})
-- [ ] T106 [US5] Implement cache invalidation on document updates in backend/src/main.py DELETE /documents/{document_id} endpoint
+- [ ] T106 [US5] Implement cache invalidation on document deletion in backend/src/main.py DELETE /documents/{document_id} endpoint
+- [ ] T106a [US5] Implement cache invalidation on document update in backend/src/main.py PATCH /documents/{document_id} endpoint (clear search caches for affected document)
 - [ ] T107 [US5] Configure Redis LRU eviction policy in database/docker-compose.yml (maxmemory-policy allkeys-lru)
 - [ ] T108 [US5] Add cache warming script in backend/scripts/warm_cache.py for common medical queries
 - [ ] T109 [US5] Update backend/src/tasks.py to use cached embeddings in message_handler_task
@@ -290,11 +300,13 @@
 - [ ] T141 [P] Create comprehensive setup guide in docs/setup_instructions.md with prerequisites and step-by-step installation
 - [ ] T142 [P] Update README.md with feature overview, architecture diagram, and quickstart links
 - [ ] T143 [P] Add API documentation in docs/api_reference.md based on OpenAPI contracts
-- [ ] T144 Code cleanup and refactoring: remove legacy Streamlit code from frontend/main.py and frontend/helper.py
+- [ ] T144 Code cleanup and refactoring: mark legacy Streamlit code in frontend/main.py and frontend/helper.py with "# LEGACY CODE - replaced by frontend/chainlit.py" comments
 - [ ] T145 [P] Add security hardening: rate limiting in backend/src/main.py using slowapi
 - [ ] T146 [P] Add input validation for all API endpoints using Pydantic validators
+- [ ] T146a [P] Add CORS configuration in backend/src/main.py to allow Chainlit frontend origin
 - [ ] T147 [P] Create docker-compose.yml in project root to orchestrate all services (backend, frontend, databases, monitoring, serving)
 - [ ] T148 [P] Create .dockerignore files to optimize Docker build context
+- [ ] T148a [P] Add environment variable validation in backend/src/configs/setup.py to ensure all required vars are set at startup
 - [ ] T149 Performance optimization: tune vLLM gpu-memory-utilization and max-model-len parameters
 - [ ] T150 Performance optimization: tune Triton batching parameters for embedding/reranking models
 - [ ] T151 [P] Add error handling for model serving failures with graceful fallback to OpenAI/Cohere
@@ -417,23 +429,29 @@ Then collectively complete User Stories 5 and 7.
 
 ## Task Summary
 
-- **Total Tasks**: 155
+- **Total Tasks**: 167 (enhanced with validation, measurement, and safety tasks)
 - **Phase 1 (Setup)**: 14 tasks
-- **Phase 2 (Foundational)**: 16 tasks
+- **Phase 2 (Foundational)**: 18 tasks (added T030a migration execution, T030b health checks)
 - **Phase 3 (US1 - Chainlit UI)**: 18 tasks
-- **Phase 4 (US2 - Fine-tuning)**: 30 tasks
+- **Phase 4 (US2 - Fine-tuning)**: 33 tasks (added T078a-c guardrails validation)
 - **Phase 5 (US3 - Hybrid Search)**: 10 tasks
-- **Phase 6 (US4 - Dataset Integration)**: 14 tasks
-- **Phase 7 (US5 - Caching)**: 8 tasks
+- **Phase 6 (US4 - Dataset Integration)**: 18 tasks (added T093a, T094a, T102a-b for measurement and incremental updates)
+- **Phase 7 (US5 - Caching)**: 9 tasks (added T106a cache invalidation on update)
 - **Phase 8 (US6 - Monitoring)**: 16 tasks
 - **Phase 9 (US7 - Load Testing)**: 14 tasks
-- **Phase 10 (Polish)**: 15 tasks
+- **Phase 10 (Polish)**: 17 tasks (added T146a CORS, T148a environment validation)
 
-**Parallel Opportunities Identified**: 89 tasks marked [P] can run in parallel within their phases
+**Parallel Opportunities Identified**: 97 tasks marked [P] can run in parallel within their phases
 
 **Independent Test Criteria**: Each user story has clear acceptance criteria defined in spec.md
 
-**Suggested MVP Scope**: Phase 1 + Phase 2 + Phase 3 (User Story 1 only) = 48 tasks
+**Suggested MVP Scope**: Phase 1 + Phase 2 + Phase 3 (User Story 1 only) = 50 tasks
+
+**Quality Enhancements**:
+
+- Added 9 validation/measurement tasks for SC-008 (guardrails), SC-018 (chunking), FR-026 (incremental updates)
+- Added 3 safety/reliability tasks: health checks, CORS config, environment validation
+- All enhancements follow MVP principles: simple, safe, effective
 
 ---
 
