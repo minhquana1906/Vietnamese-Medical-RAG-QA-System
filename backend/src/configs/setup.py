@@ -26,13 +26,6 @@ class BackendSettings(BaseSettings):
     jwt_secret: str = Field(default=os.getenv("JWT_SECRET", "CHANGE_ME_INSECURE"))
     jwt_expiry_hours: int = Field(default=int(os.getenv("JWT_EXPIRY_HOURS", "24")))
 
-    # Digital Ocean Spaces
-    # do_spaces_endpoint: str = Field(default=os.getenv("DO_SPACES_ENDPOINT", "https://sgp1.digitaloceanspaces.com"))
-    # do_spaces_key: str = Field(default=os.getenv("DO_SPACES_KEY", ""))
-    # do_spaces_secret: str = Field(default=os.getenv("DO_SPACES_SECRET", ""))
-    # do_spaces_bucket: str = Field(default=os.getenv("DO_SPACES_BUCKET", "medical-rag-prod"))
-    # do_spaces_region: str = Field(default=os.getenv("DO_SPACES_REGION", "sgp1"))
-
     # Elasticsearch (BM25 keyword search)
     elasticsearch_host: str = Field(
         default=os.getenv("ELASTICSEARCH_HOST", "localhost")
@@ -109,7 +102,7 @@ class BackendSettings(BaseSettings):
     deeseek_chat_model: str = Field(default="deepseek-chat")
     deeseek_reasoner_model: str = Field(default="deepseek-reasoner")
     deepseek_baseurl: str = Field(
-        default=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        default=os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
     )
     cohere_rerank_model: str = Field(default="rerank-multilingual-v3.0")
 
@@ -136,6 +129,10 @@ class BackendSettings(BaseSettings):
     # CHUNKING settings
     chunk_size: int = Field(default=512)
     chunk_overlap: int = Field(default=50)
+
+    # Logging settings
+    log_level: str = Field(default=os.getenv("LOG_LEVEL", "INFO"))
+    debug: bool = Field(default=os.getenv("DEBUG", "false").lower() == "true")
 
 
 class DatabaseSettings(BaseSettings):
