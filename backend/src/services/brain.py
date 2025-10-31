@@ -1,12 +1,80 @@
 import json
 import os
+from typing import Dict, List, Optional
 
+import httpx
 from loguru import logger
 from openai import OpenAI
 
 from ..configs.setup import get_backend_settings
 
 settings = get_backend_settings()
+
+
+def get_qwen3_client():
+    try:
+        vllm_url = settings.vllm_api_base or os.getenv(
+            "VLLM_API_BASE", "http://localhost:8000"
+        )
+        client = OpenAI(
+            api_key="EMPTY", base_url=f"{vllm_url}/v1"  # vLLM doesn't require API key
+        )
+        return client
+    except Exception as e:
+        logger.error(f"Error initializing Qwen3 vLLM client: {e}")
+        return None
+
+
+def qwen3_chat_complete(
+    messages: List[Dict[str, str]],
+    model: str = "Qwen3-4B-Instruct-2507",
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    use_fallback: bool = True,
+) -> Optional[str]:
+    temperature = temperature if temperature is not None else settings.temperature
+    max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
+
+    # Try Qwen3 via vLLM first
+    try:
+        client = get_qwen3_client()
+        if client:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            logger.info("Generated response with Qwen3 via vLLM")
+            content: str = response.choices[0].message.content or ""
+            return content
+    except Exception as e:
+        logger.warning(f"Qwen3 vLLM generation failed: {e}")
+
+    # Fallback to OpenAI
+    if use_fallback:
+        logger.info("Falling back to OpenAI for generation")
+        return openai_chat_complete(
+            messages, temperature=temperature, max_tokens=max_tokens
+        )
+
+    return None
+
+
+def check_qwen3_health() -> bool:
+    try:
+        vllm_url = settings.vllm_url
+        response = httpx.get(f"{vllm_url}/health", timeout=5.0)
+        if response.status_code == 200:
+            logger.debug("Qwen3 vLLM service is healthy")
+            return True
+        return False
+    except Exception as e:
+        logger.warning(f"Qwen3 vLLM health check failed: {e}")
+        return False
+
+
+# ============= LEGACY OPENAI FUNCTIONS =============
 
 
 def get_openai_client():
@@ -39,7 +107,7 @@ def openai_chat_complete(
     model=settings.openai_model,
     temperature=settings.temperature,
     max_tokens=settings.max_tokens,
-):
+) -> Optional[str]:
     try:
         client = get_openai_client()
         response = client.chat.completions.create(
@@ -48,7 +116,8 @@ def openai_chat_complete(
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return response.choices[0].message.content
+        content: Optional[str] = response.choices[0].message.content
+        return content
     except Exception as e:
         logger.error(f"Error generating response: {e}")
         raise
