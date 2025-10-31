@@ -6,13 +6,14 @@ from loguru import logger
 from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
 from .core.vectorize import search_vectors, upsert_points
-from .models import get_messages_from_conversation, update_conversation
+from .database import SessionLocal
+from .models import ChatSession, Message, User
 from .services.agent import ai_agent_handle
 from .services.brain import (detect_route, enhance_query_quality,
                              get_tavily_agent_answer, openai_chat_complete,
                              openai_generate_embedding)
 from .services.chunking import dynamic_chunking
-from .services.rerank import rerank_documents
+from .services.rerank import cohere_rerank
 from .services.summarizer import get_summarized_content
 
 settings = get_backend_settings()
@@ -83,7 +84,7 @@ def rag_qa_task(history, question):
 
         # rerank
         if relevant_docs:
-            reranked_docs, rerank_context = rerank_documents(
+            reranked_docs, rerank_context = cohere_rerank(
                 new_question, relevant_docs
             )
         else:
@@ -150,27 +151,100 @@ def message_handler_task(bot_id, user_id, query):
     logger.info(f"Message handler started: {bot_id}/{user_id}")
 
     try:
-        # Add query message to db (mark as request)
-        conversation_id = update_conversation(bot_id, user_id, query, is_request=True)
+        with SessionLocal() as db:
+            # Create or get chat session for this user
+            # Note: In the new schema, user_id should be a UUID from the users table
+            # For now, we'll use bot_id as a fallback identifier until proper user authentication is implemented
 
-        # Retrieve conversation history
-        messages = get_messages_from_conversation(conversation_id)
-        logger.info(
-            f"Conversation {conversation_id}: {len(messages)} messages in history"
-        )
+            # Try to find existing active session
+            chat_session = (
+                db.query(ChatSession)
+                .join(User)
+                .filter(
+                    User.oauth_id
+                    == user_id,  # Using oauth_id as temporary user identifier
+                    ChatSession.is_active == True,
+                )
+                .first()
+            )
 
-        history = messages[:-1]
-        # Get answer from RAG
-        answer = bot_route_answer_message(history, query)
-        logger.info(f"Generated response for conversation {conversation_id}:\n{answer}")
+            # If no session exists, create a default user and session
+            if not chat_session:
+                # Check if user exists
+                user = db.query(User).filter(User.oauth_id == user_id).first()
 
-        # Summarize and save the response
-        summarized_answer = get_summarized_content(answer)
-        update_conversation(bot_id, user_id, summarized_answer, is_request=False)
+                if not user:
+                    # Create default user for legacy bot interactions
+                    import uuid as uuid_lib
 
-        logger.info(f"Message handler completed: {bot_id}/{user_id}")
+                    user = User(
+                        id=uuid_lib.uuid4(),
+                        email=f"{user_id}@legacy.local",
+                        oauth_provider="legacy",
+                        oauth_id=user_id,
+                        display_name=f"Legacy User {user_id}",
+                        is_active=True,
+                        user_metadata={"bot_id": bot_id, "legacy": True},
+                    )
+                    db.add(user)
+                    db.flush()
 
-        return {"role": "assistant", "content": answer}
+                # Create new chat session
+                chat_session = ChatSession(
+                    user_id=user.id,
+                    name=f"Chat with {bot_id}",
+                    is_active=True,
+                    session_metadata={"bot_id": bot_id},
+                )
+                db.add(chat_session)
+                db.flush()
+
+            # Add user message
+            user_message = Message(
+                chat_session_id=chat_session.id,
+                role="user",
+                content=query,
+            )
+            db.add(user_message)
+            db.commit()
+
+            # Get conversation history
+            messages_db = (
+                db.query(Message)
+                .filter(Message.chat_session_id == chat_session.id)
+                .order_by(Message.created_at)
+                .all()
+            )
+
+            # Convert to format expected by LLM
+            messages = [{"role": "system", "content": settings.system_prompt}]
+            for msg in messages_db:
+                messages.append({"role": msg.role, "content": msg.content})
+
+            logger.info(
+                f"Session {chat_session.id}: {len(messages)} messages in history"
+            )
+
+            # Get answer from RAG (history excludes the current query)
+            history = messages[:-1]
+            answer = bot_route_answer_message(history, query)
+            logger.info(f"Generated response for session {chat_session.id}:\n{answer}")
+
+            # Summarize and save the response
+            summarized_answer = get_summarized_content(answer)
+
+            assistant_message = Message(
+                chat_session_id=chat_session.id,
+                role="assistant",
+                content=summarized_answer,
+            )
+            db.add(assistant_message)
+            db.commit()
+
+            logger.info(f"Message handler completed: {bot_id}/{user_id}")
+
+            return {"role": "assistant", "content": answer}
+
     except Exception as e:
         logger.error(f"Error in message handler: {e}")
         return {
