@@ -26,20 +26,6 @@ if not DATABASE_URL:
     DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 
-WELCOME_MESSAGE = (
-    "**Xin chào, tôi là Meddy!** 🤗\n"
-    "Tôi ở đây để giúp bạn giải quyết, tra cứu các thông tin trong lĩnh vực y tế. "
-    "Hãy cứ thoải mái hỏi tôi bất cứ điều gì về y tế, và tôi sẽ làm hết sức mình để hỗ trợ bạn!"
-)
-
-AUTHENTICATED_SIDEBAR_GUIDE = (
-    """
-### 💡 Hướng dẫn sử dụng
-    - "Triệu chứng của bệnh tiểu đường là gì?"
-    - "Làm thế nào để phòng ngừa cảm cúm?"
-"""
-)
-
 @cl.oauth_callback
 def oauth_callback(provider_id, token, raw_user_data, default_user):
     if provider_id == "github":
@@ -91,9 +77,6 @@ def oauth_callback(provider_id, token, raw_user_data, default_user):
 async def start():
     msg = await cl.Message(content="Hỏi đáp y khoa với Meddy 🤓", author="system").send()
 
-    # Gửi thêm hướng dẫn
-    guide_msg = await cl.Message(content=AUTHENTICATED_SIDEBAR_GUIDE, author="system").send()
-
 
 # Thêm handler cho tin nhắn từ user
 @cl.on_message
@@ -128,7 +111,6 @@ async def main(message: cl.Message):
 def get_data_layer():
     return SQLAlchemyDataLayer(conninfo=DATABASE_URL)
 
-
 @cl.on_chat_resume
 async def on_chat_resume(thread: ThreadDict):
     cl.user_session.set("chat_history", [])
@@ -136,7 +118,7 @@ async def on_chat_resume(thread: ThreadDict):
     for message in thread["steps"]:
         if message["type"] == "user_message":
             cl.user_session.get("chat_history").append(
-                {"role": "user", "content": message["ouput"]}
+                {"role": "user", "content": message["output"]}
             )
         elif message["type"] == "assistant_message":
             cl.user_session.get("chat_history").append(
@@ -150,6 +132,3 @@ async def handle_toggle_user(action):
         username = action.payload["username"]
         current_status = action.payload["current_status"]
         new_status = not current_status
-
-        # Refresh dashboard
-        await show_dashboard()

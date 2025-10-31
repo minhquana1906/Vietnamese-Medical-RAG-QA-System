@@ -86,7 +86,7 @@ reaction_on_message_received = false
 
 [UI]
 # Name of the assistant.
-name = "Meddy - Trợ lý Y tế"
+name = "Assistant"
 
 # default_theme = "dark"
 
@@ -95,14 +95,14 @@ name = "Meddy - Trợ lý Y tế"
 # default_sidebar_state = "open"
 
 # Description of the assistant. This is used for HTML tags.
-description = "Hệ thống hỏi đáp y tế thông minh với AI - Meddy"
+# description = ""
 
 # Chain of Thought (CoT) display mode. Can be "hidden", "tool_call" or "full".
-cot = "hidden"
+cot = "full"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
-custom_css = "/public/styles.css"
+# custom_css = "/public/test.css"
 
 # Specify additional attributes for a custom CSS file
 # custom_css_attributes = "media=\"print\""
@@ -151,31 +151,3 @@ default_avatar_file_url = ""
 
 [meta]
 generated_by = "2.8.3"
-
-[auth]
-enabled = true
-secret = "NUS_c_o6dD-Ne5e-Wdq605eYKA-YCs6YKXrizItftKDM"
-
-[[auth.providers]]
-id = "github"
-type = "oauth"
-name = "GitHub"
-client_id = "Ov23lig8761tz1FuWz2Z"
-client_secret = "2afc201bfc2bfc6fa2b039c7b4d9963d1b0f7acc"
-authorize_url = "https://github.com/login/oauth/authorize"
-token_url = "https://github.com/login/oauth/access_token"
-userinfo_url = "https://api.github.com/user"
-scopes = ["read:user", "user:email"]
-pkce = false
-
-[[auth.providers]]
-id = "google"
-type = "oauth"
-name = "Google"
-client_id = "YOUR_GOOGLE_CLIENT_ID"
-client_secret = "YOUR_GOOGLE_CLIENT_SECRET"
-authorize_url = "https://accounts.google.com/o/oauth2/v2/auth"
-token_url = "https://oauth2.googleapis.com/token"
-userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
-scopes = ["openid", "email", "profile"]
-pkce = true

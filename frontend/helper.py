@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 
@@ -109,12 +110,35 @@ def simulate_streaming(text, delay=0.05):
         yield current_word
 
 
-def streaming_response_generator(query):
+async def async_simulate_streaming(text, delay=0.05):
+    if not text or not isinstance(text, str):
+        return
+    current_word = ""
+    for char in text:
+        if char == " ":
+            if current_word:
+                yield current_word
+                current_word = ""
+            yield " "
+            await asyncio.sleep(delay)
+        elif char == "\n":
+            if current_word:
+                yield current_word
+                current_word = ""
+            yield "\n"
+            await asyncio.sleep(delay)
+        else:
+            current_word += char
+    if current_word:
+        yield current_word
+
+async def streaming_response_generator(query):
     try:
-        response_text = get_chat_complete(query)
-
-        yield from simulate_streaming(response_text)
-
+        # Gọi hàm sync trong thread pool để không block event loop
+        loop = asyncio.get_event_loop()
+        response_text = await loop.run_in_executor(None, get_chat_complete, query)
+        async for token in async_simulate_streaming(response_text):
+            yield token
     except Exception as e:
         logger.error(f"Error in streaming response: {e}")
         yield "❌ Đã xảy ra lỗi khi xử lý yêu cầu của bạn."

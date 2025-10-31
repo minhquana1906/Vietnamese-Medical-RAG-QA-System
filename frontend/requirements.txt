@@ -5,3 +5,4 @@ loguru
 aiohttp
 sqlalchemy
 asyncpg
+psycopg2-binary

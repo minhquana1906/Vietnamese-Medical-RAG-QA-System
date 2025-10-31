@@ -8,6 +8,9 @@ COPY frontend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY frontend/. .
+RUN mkdir -p /app/.chainlit/translations
+COPY frontend/.chainlit/translations/en-US.json /app/.chainlit/translations/en-US.json
+COPY frontend/.chainlit/config.toml /app/.chainlit/config.toml
 
 # ======================================================================================
 FROM python:3.12-slim-bookworm AS runtime

@@ -15,6 +15,9 @@ BEGIN
    END IF;
 END
 
+
+$$;
+
 CREATE TABLE users (
     "id" UUID PRIMARY KEY,
     "identifier" TEXT NOT NULL UNIQUE,
@@ -84,4 +87,3 @@ CREATE TABLE IF NOT EXISTS feedbacks (
     "comment" TEXT,
     FOREIGN KEY ("threadId") REFERENCES threads("id") ON DELETE CASCADE
 );
-$$;

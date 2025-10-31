@@ -62,7 +62,7 @@ backend = [
 frontend = [
     "requests==2.32.3",
     "tenacity>=8.5.0",
-    "chainlit>=2.0.0,<2.0.5",
+    "chainlit<=2.0.0",
     "loguru==0.7.3",
 ]
 
