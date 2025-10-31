@@ -212,9 +212,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# note.md
 
-# .github/prompts
-# .github/copilot-instructions.md
-# .specify
-# .vscode
+.github/prompts
+.github/copilot-instructions.md
+.specify
+.vscode
+specs/
