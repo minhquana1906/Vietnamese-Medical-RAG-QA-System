@@ -1,14 +1,14 @@
 <!--
 Sync Impact Report:
-Version Change: 0.0.0 → 1.0.0
-Modified Principles: N/A (Initial version)
-Added Sections: All core principles and governance framework
-Removed Sections: None
+Version Change: 1.0.0 → 2.0.0
+Modified Principles: Technology Stack - Frontend framework changed from Streamlit to Chainlit
+Added Sections: Chainlit frontend rationale
+Removed Sections: Streamlit reference from Technology Stack
 Templates Status:
   - ✅ plan-template.md: Constitution checks aligned with MVP principles
   - ✅ spec-template.md: Requirements structure compatible with MVP approach
   - ✅ tasks-template.md: Task organization supports modular implementation
-Follow-up TODOs: None - all placeholders filled
+Follow-up TODOs: None
 -->
 
 # Vietnamese Medical RAG QA System Constitution
@@ -104,13 +104,21 @@ Follow-up TODOs: None - all placeholders filled
 
 - **Language**: Python 3.12
 - **Backend Framework**: FastAPI 0.112.2
-- **Frontend**: Streamlit 1.36.0
+- **Frontend**: Chainlit 1.3.2 (replacing Streamlit for RAG-native chat experience)
 - **Vector DB**: Qdrant 1.10.1
 - **Cache/Queue**: Redis 5.0.7 (with Celery 5.4.0)
 - **Search**: Elasticsearch 8.11.0 (BM25 keyword search)
 - **LLM Provider**: OpenAI (gpt-4o-mini, text-embedding-3-small), Deepseek (chat, reasoner)
 - **Reranking**: Cohere (rerank-multilingual-v3.0)
 - **Deployment**: Docker Compose with separate containers (API, Worker, DBs)
+
+**Frontend Framework Rationale**: Chainlit 1.3.2 replaces Streamlit as it provides:
+
+- Native RAG features (streaming responses, conversation history, session management)
+- Built-in authentication (email/password + OAuth: Google, GitHub)
+- Persistent chat sessions with SQLAlchemy integration
+- Superior UX for medical consultation workflows
+- Better alignment with production chat application requirements
 
 ### External Services
 
@@ -193,4 +201,11 @@ When MVP transitions to production:
 - Documentation standards will increase
 - This constitution will be amended to v2.0.0
 
-**Version**: 1.0.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-10-29
+**Version**: 2.0.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-10-31
+
+**Changelog**:
+
+- **v2.0.0** (2025-10-31): MAJOR - Updated frontend framework from Streamlit to Chainlit 1.3.2 for RAG-native features
+- **v1.0.0** (2025-10-29): Initial constitution ratification
+
+```

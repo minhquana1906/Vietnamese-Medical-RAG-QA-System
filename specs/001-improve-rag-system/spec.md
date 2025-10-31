@@ -5,6 +5,8 @@
 **Status**: Draft
 **Input**: User description: "Comprehensive RAG system improvements including Chainlit UI migration, Qwen3 model fine-tuning and serving, hybrid search implementation, caching layer, monitoring system, and stress testing"
 
+**Tests**: Tests are **NOT REQUIRED** during MVP phase per [Constitution Section III](/.specify/memory/constitution.md#iii-no-test-driven-development-mvp-exception). "Independent Test" criteria in user stories refer to **manual validation steps**, not automated tests.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Modern Chat Interface with Authentication (Priority: P1)
@@ -145,9 +147,9 @@ The system undergoes stress testing and load testing to validate performance cha
 
 **UI Migration & Authentication:**
 
-- **FR-001**: System MUST replace Streamlit frontend with Chainlit for RAG-native chat experience
+- **FR-001**: System MUST replace Streamlit frontend with Chainlit 1.3.2 for RAG-native chat experience
 - **FR-002**: System MUST support user signup and login with email/password authentication
-- **FR-003**: System MUST support OAuth authentication providers for user login
+- **FR-003**: System MUST support OAuth authentication providers (Google, GitHub) for user login
 - **FR-004**: System MUST maintain persistent chat sessions across user logins
 - **FR-005**: System MUST display conversation history for authenticated users
 - **FR-006**: System MUST implement session lifecycle management per Chainlit specifications
@@ -166,7 +168,7 @@ The system undergoes stress testing and load testing to validate performance cha
 - **FR-013**: System MUST fine-tune Qwen3-4B-Instruct-2507 on medical QA dataset with tracking of training metrics
 - **FR-014**: System MUST fine-tune Qwen3-Embedding-0.6B on medical embedding dataset with evaluation
 - **FR-015**: System MUST evaluate fine-tuned models against baseline using consistent test sets
-- **FR-016**: System MUST compare fine-tuned vs baseline performance with statistical significance testing (minimum 2-5% improvement in primary metrics required for deployment)
+- **FR-016**: System MUST compare fine-tuned vs baseline performance with statistical significance testing (minimum **2% improvement** in primary metrics required for deployment; **10% improvement** is aspirational target)
 - **FR-017**: System MUST serve fine-tuned Qwen3-4B-Instruct-2507 for response generation after validation
 - **FR-018**: System MUST serve fine-tuned Qwen3-Embedding-0.6B for query/document embedding after validation
 - **FR-019**: System MUST serve Qwen3-Reranker-0.6B for document reranking
@@ -213,7 +215,7 @@ The system undergoes stress testing and load testing to validate performance cha
 - **FR-045**: System MUST expose metrics for LLM generation latency
 - **FR-046**: System MUST expose metrics for cache hit/miss rates
 - **FR-047**: System MUST expose metrics for request throughput and error rates
-- **FR-048**: System MUST scrape and store metrics using Prometheus, collect logs via Promtail+Loki, capture traces with Tempo, and visualize all data in Grafana using existing dashboard templates
+- **FR-048**: System MUST scrape and store metrics using Prometheus, collect logs via Promtail+Loki, capture traces with Tempo, and visualize all data in Grafana using pre-built dashboard templates (FastAPI Dashboard #16110, Node Exporter #1860, Loki Dashboard #13639 from grafana.com/dashboards, plus custom RAG pipeline dashboard. You can also consider using VLLM template dashboard #23991 from grafana.com/dashboards and add some customizations to visualize triton inference metrics. Grafana also have some drill-down features that you can utilize to visualize specific request traces and logs from Loki and Tempo.)
 - **FR-049**: System MUST track model serving health and availability
 
 **Performance Testing:**
@@ -248,8 +250,8 @@ The system undergoes stress testing and load testing to validate performance cha
 
 **Model Performance:**
 
-- **SC-005**: Fine-tuned generation model shows at least 10% improvement in answer quality metrics (BLEU, ROUGE, or domain-specific accuracy) compared to baseline
-- **SC-006**: Fine-tuned embedding model shows at least 10% improvement in retrieval precision@10 compared to baseline embeddings
+- **SC-005**: Fine-tuned generation model shows at least **10% improvement** (aspirational target) in answer quality metrics (BLEU, ROUGE, or domain-specific accuracy) compared to baseline; **2% minimum** required for deployment per FR-016
+- **SC-006**: Fine-tuned embedding model shows at least **10% improvement** (aspirational target) in retrieval precision@10 compared to baseline embeddings; **2% minimum** required for deployment per FR-016
 - **SC-007**: Reranking improves top-5 document relevance by at least 20% over initial retrieval ranking
 - **SC-008**: Guardrail model successfully filters inappropriate queries with less than 2% false positive rate
 

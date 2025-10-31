@@ -24,7 +24,7 @@ Comprehensive upgrade of the Vietnamese Medical RAG QA System featuring:
 **Language/Version**: Python 3.12
 **Primary Dependencies**:
 - **Backend**: FastAPI 0.112.2, Celery 5.4.0, Alembic 1.16.5 (migrations), SQLAlchemy 1.4.54
-- **Frontend**: Chainlit (latest stable, replacing Streamlit 1.36.0)
+- **Frontend**: Chainlit 1.3.2 (replacing Streamlit 1.36.0)
 - **Vector DB**: Qdrant 1.10.1 (qdrant/qdrant:v1.15.1 Docker image)
 - **Keyword Search**: Elasticsearch 8.11.0 (docker.elastic.co/elasticsearch/elasticsearch:8.11.0)
 - **Cache/Queue**: Redis 7.2-bookworm (cache + Celery broker)
