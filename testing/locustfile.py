@@ -1,21 +1,9 @@
-"""
-Locust load testing file for Vietnamese Medical RAG QA System.
-
-Usage:
-    locust -f locustfile.py --host=http://localhost:8000 --users=100 --spawn-rate=10
-
-Test scenarios:
-    - simple_query: Common medical questions (weight 3)
-    - complex_query: Multi-part medical questions (weight 1)
-"""
-
 import random
 
 from locust import HttpUser, between, task
 
 
 class RAGUser(HttpUser):
-    """Simulates a user interacting with the Medical RAG system."""
 
     wait_time = between(1, 3)  # Wait 1-3 seconds between requests
 

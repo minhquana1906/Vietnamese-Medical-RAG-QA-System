@@ -5,7 +5,10 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 
+from .configs.logging_config import setup_logging
 from .configs.setup import get_backend_settings
+
+setup_logging()
 from .core.vectorize import create_collection
 from .models import init_db, insert_document
 from .schemas.schema import CompleteRequest

@@ -1,6 +1,13 @@
 from celery import Celery
+from celery.signals import worker_process_init
 
 from ..configs.setup import get_backend_settings
+from .logging_config import setup_logging
+
+
+@worker_process_init.connect
+def init_celery_worker_logging(**kwargs):
+    setup_logging()
 
 
 def get_celery_app(name):
