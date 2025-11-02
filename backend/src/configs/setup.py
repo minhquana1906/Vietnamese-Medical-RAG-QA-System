@@ -5,8 +5,12 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from .prompt_templates import (INTENT_DETECTION_PROMPT, RAG_PROMPT,
-                               REWRITE_USER_PROMPT, SYSTEM_PROMPT)
+from .prompt_templates import (
+    INTENT_DETECTION_PROMPT,
+    RAG_PROMPT,
+    REWRITE_USER_PROMPT,
+    SYSTEM_PROMPT,
+)
 
 load_dotenv()
 
@@ -22,9 +26,6 @@ class BackendSettings(BaseSettings):
     cohere_api_key: str = Field(default=os.getenv("COHERE_API_KEY", ""))
     tavily_api_key: str = Field(default=os.getenv("TAVILY_API_KEY", ""))
     hf_token: str = Field(default=os.getenv("HF_TOKEN", ""))
-
-    jwt_secret: str = Field(default=os.getenv("JWT_SECRET", "CHANGE_ME_INSECURE"))
-    jwt_expiry_hours: int = Field(default=int(os.getenv("JWT_EXPIRY_HOURS", "24")))
 
     # Elasticsearch (BM25 keyword search)
     elasticsearch_host: str = Field(

@@ -5,7 +5,7 @@ from loguru import logger
 
 from .core.cache import get_redis_client
 from .database import get_db_session
-from .schemas.chainlit_schema import HealthCheckResponse
+from .schemas.schema import HealthCheckResponse
 
 
 def generate_hash(length=16):
