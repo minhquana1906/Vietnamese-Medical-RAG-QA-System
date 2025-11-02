@@ -7,11 +7,15 @@ from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
 from .core.vectorize import search_vectors, upsert_points
 from .database import SessionLocal
-from .models import ChatSession, Message, User
+from .models import Thread, Step, User
 from .services.agent import ai_agent_handle
-from .services.brain import (detect_route, enhance_query_quality,
-                             get_tavily_agent_answer, openai_chat_complete,
-                             openai_generate_embedding)
+from .services.brain import (
+    detect_route,
+    enhance_query_quality,
+    get_tavily_agent_answer,
+    openai_chat_complete,
+    openai_generate_embedding,
+)
 from .services.chunking import dynamic_chunking
 from .services.rerank import cohere_rerank
 from .services.summarizer import get_summarized_content
@@ -145,101 +149,114 @@ def rag_qa_task(history, question):
 
 
 @shared_task
-def message_handler_task(bot_id, user_id, query):
-    logger.info(f"Message handler started: {bot_id}/{user_id}")
+def message_handler_task(user_identifier, thread_id, query):
+    """
+    Handle incoming messages using Chainlit schema.
+
+    Args:
+        user_identifier: Chainlit user identifier (from User.identifier)
+        thread_id: UUID of the thread (conversation)
+        query: User's question
+
+    Returns:
+        dict: Response with role and content
+    """
+    logger.info(f"Message handler started: user={user_identifier}, thread={thread_id}")
 
     try:
         with SessionLocal() as db:
-            # Create or get chat session for this user
-            # Note: In the new schema, user_id should be a UUID from the users table
-            # For now, we'll use bot_id as a fallback identifier until proper user authentication is implemented
+            # Find the user by identifier
+            user = db.query(User).filter(User.identifier == user_identifier).first()
 
-            # Try to find existing active session
-            chat_session = (
-                db.query(ChatSession)
-                .join(User)
-                .filter(
-                    User.oauth_id
-                    == user_id,  # Using oauth_id as temporary user identifier
-                    ChatSession.is_active == True,
+            if not user:
+                logger.error(f"User not found: {user_identifier}")
+                return {
+                    "role": "assistant",
+                    "content": "Xin lỗi, không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.",
+                }
+
+            # Find or create thread
+            thread = db.query(Thread).filter(Thread.id == thread_id).first()
+
+            if not thread:
+                # Create new thread if it doesn't exist
+                thread = Thread(
+                    id=thread_id,
+                    userId=user.id,
+                    userIdentifier=user_identifier,
+                    name=f"Medical Consultation",
+                    metadata_={"created_by": "message_handler_task"},  # Use metadata_
                 )
-                .first()
-            )
-
-            # If no session exists, create a default user and session
-            if not chat_session:
-                # Check if user exists
-                user = db.query(User).filter(User.oauth_id == user_id).first()
-
-                if not user:
-                    # Create default user for legacy bot interactions
-                    import uuid as uuid_lib
-
-                    user = User(
-                        id=uuid_lib.uuid4(),
-                        email=f"{user_id}@legacy.local",
-                        oauth_provider="legacy",
-                        oauth_id=user_id,
-                        display_name=f"Legacy User {user_id}",
-                        is_active=True,
-                        user_metadata={"bot_id": bot_id, "legacy": True},
-                    )
-                    db.add(user)
-                    db.flush()
-
-                # Create new chat session
-                chat_session = ChatSession(
-                    user_id=user.id,
-                    name=f"Chat with {bot_id}",
-                    is_active=True,
-                    session_metadata={"bot_id": bot_id},
-                )
-                db.add(chat_session)
+                db.add(thread)
                 db.flush()
+                logger.info(f"Created new thread: {thread_id}")
 
-            # Add user message
-            user_message = Message(
-                chat_session_id=chat_session.id,
-                role="user",
-                content=query,
+            # Create user message step
+            import uuid as uuid_lib
+
+            user_step = Step(
+                id=uuid_lib.uuid4(),
+                name="user_message",
+                type="user_message",
+                threadId=thread.id,
+                streaming=False,
+                input=query,
+                output=query,
+                metadata_={"role": "user"},  # Use metadata_
             )
-            db.add(user_message)
+            db.add(user_step)
             db.commit()
 
-            # Get conversation history
-            messages_db = (
-                db.query(Message)
-                .filter(Message.chat_session_id == chat_session.id)
-                .order_by(Message.created_at)
+            # Get conversation history from previous steps
+            previous_steps = (
+                db.query(Step)
+                .filter(Step.threadId == thread.id)
+                .filter(Step.type.in_(["user_message", "assistant_message"]))
+                .order_by(Step.createdAt)
                 .all()
             )
 
             # Convert to format expected by LLM
             messages = [{"role": "system", "content": settings.system_prompt}]
-            for msg in messages_db:
-                messages.append({"role": msg.role, "content": msg.content})
+            for step in previous_steps:
+                # Determine role from step metadata or type
+                role = (
+                    step.metadata_.get("role", "user") if step.metadata_ else "user"
+                )  # Use metadata_
+                if step.type == "assistant_message":
+                    role = "assistant"
 
-            logger.info(
-                f"Session {chat_session.id}: {len(messages)} messages in history"
-            )
+                content = step.output if step.output else step.input
+                if content:
+                    messages.append({"role": role, "content": content})
 
-            # Get answer from RAG (history excludes the current query)
-            history = messages[:-1]
+            logger.info(f"Thread {thread.id}: {len(messages)} messages in history")
+
+            # Get answer from RAG (history excludes system prompt)
+            history = messages[1:-1]  # Exclude system prompt and current query
             answer = bot_route_answer_message(history, query)
-            logger.info(f"Generated response for session {chat_session.id}:\n{answer}")
+            logger.info(f"Generated response for thread {thread.id}")
 
             # Summarize and save the response
             summarized_answer = get_summarized_content(answer)
 
-            assistant_message = Message(
-                chat_session_id=chat_session.id,
-                role="assistant",
-                content=summarized_answer,
+            # Create assistant message step
+            assistant_step = Step(
+                id=uuid_lib.uuid4(),
+                name="assistant_message",
+                type="assistant_message",
+                threadId=thread.id,
+                streaming=False,
+                input=query,
+                output=summarized_answer,
+                metadata_={"role": "assistant"},  # Use metadata_
             )
-            db.add(assistant_message)
+            db.add(assistant_step)
             db.commit()
 
-            logger.info(f"Message handler completed: {bot_id}/{user_id}")
+            logger.info(
+                f"Message handler completed: user={user_identifier}, thread={thread_id}"
+            )
 
             return {"role": "assistant", "content": answer}
 

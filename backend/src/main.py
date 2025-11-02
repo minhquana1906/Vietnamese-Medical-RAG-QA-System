@@ -5,8 +5,7 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-    OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -16,8 +15,13 @@ from .configs.setup import get_backend_settings
 from .core.vectorize import create_collection
 from .helpers import check_cache_health, check_database_health
 from .models import init_db, insert_document
-from .schemas.chainlit_schema import HealthCheckResponse, SystemHealthResponse
-from .schemas.schema import CompleteRequest
+from .schemas.schema import (
+    CompleteRequest,
+    RAGQueryRequest,
+    RAGQueryResponse,
+    HealthCheckResponse,
+    SystemHealthResponse,
+)
 from .tasks import chunk_and_index_document, message_handler_task
 
 settings = get_backend_settings()
@@ -140,7 +144,9 @@ async def chat_complete(request: CompleteRequest):
     if not bot_id or not user_id or not user_message:
         raise HTTPException(status_code=400, detail="Missing required fields")
 
-    logger.info(f"Chat request from user {user_id} to bot {bot_id}: {user_message}")
+    logger.info(
+        f"[LEGACY] Chat request from user {user_id} to bot {bot_id}: {user_message}"
+    )
 
     # Start tracing span
     with tracer.start_as_current_span("chat_complete") as span:
@@ -150,8 +156,58 @@ async def chat_complete(request: CompleteRequest):
 
         start_time = time.time()
         try:
+            # Use user_id as identifier and create/find thread
+            # For legacy compatibility, we use user_id as the identifier
+            user_identifier = user_id
+
+            # Try to find or create a thread for this user
+            # In the legacy API, we don't have explicit thread_id, so we need to find/create one
+            from .database import SessionLocal
+            from .models import User, Thread
+            import uuid
+
+            with SessionLocal() as db:
+                # Find or create user
+                user = db.query(User).filter(User.identifier == user_identifier).first()
+                if not user:
+                    # Create legacy user for backward compatibility
+                    user = User(
+                        id=uuid.uuid4(),
+                        identifier=user_identifier,
+                        metadata_={"bot_id": bot_id, "legacy": True},  # Use metadata_
+                    )
+                    db.add(user)
+                    db.commit()
+                    db.refresh(user)
+
+                # Find or create active thread for this user
+                thread = (
+                    db.query(Thread)
+                    .filter(
+                        Thread.userId == user.id,
+                        Thread.metadata_["bot_id"].astext == bot_id,  # Use metadata_
+                    )
+                    .first()
+                )
+
+                if not thread:
+                    thread = Thread(
+                        id=uuid.uuid4(),
+                        userId=user.id,
+                        userIdentifier=user_identifier,
+                        name=f"Chat with {bot_id}",
+                        metadata_={"bot_id": bot_id, "legacy": True},  # Use metadata_
+                    )
+                    db.add(thread)
+                    db.commit()
+                    db.refresh(thread)
+
+                thread_id = thread.id
+
             if is_sync_request:
-                response = message_handler_task(bot_id, user_id, user_message)
+                response = message_handler_task(
+                    user_identifier, str(thread_id), user_message
+                )
                 duration = time.time() - start_time
                 rag_request_duration_seconds.labels(
                     bot_id=bot_id, stage="complete"
@@ -159,7 +215,9 @@ async def chat_complete(request: CompleteRequest):
                 rag_requests_total.labels(bot_id=bot_id, status="success").inc()
                 return {"status": "completed", "response": response}
             else:
-                response = message_handler_task.delay(bot_id, user_id, user_message)
+                response = message_handler_task.delay(
+                    user_identifier, str(thread_id), user_message
+                )
                 rag_requests_total.labels(bot_id=bot_id, status="queued").inc()
                 return {"status": "processing", "task_id": response.id}
         except Exception as e:
@@ -197,6 +255,63 @@ async def get_chat_response(task_id: str):
     except Exception as e:
         logger.error(f"Error retrieving task {task_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+# ============= RAG QUERY ENDPOINT (for Chainlit frontend) =============
+
+
+@app.post("/rag/query", response_model=RAGQueryResponse)
+async def rag_query(request: RAGQueryRequest):
+    """
+    RAG query endpoint for Chainlit frontend.
+
+    This endpoint is called by the Chainlit UI to process user queries.
+    Backend handles all logic: user management, thread management, RAG pipeline.
+
+    Args:
+        request: RAGQueryRequest with user_identifier, thread_id, query
+
+    Returns:
+        RAGQueryResponse with thread_id, response, sources
+    """
+    logger.info(
+        f"RAG query from user={request.user_identifier}, thread={request.thread_id}"
+    )
+
+    with tracer.start_as_current_span("rag_query") as span:
+        span.set_attribute("user_identifier", request.user_identifier)
+        span.set_attribute("thread_id", request.thread_id)
+
+        start_time = time.time()
+        try:
+            # Call message handler task synchronously
+            result = message_handler_task(
+                request.user_identifier, request.thread_id, request.query
+            )
+
+            duration = time.time() - start_time
+            rag_request_duration_seconds.labels(
+                bot_id="meddy", stage="complete"
+            ).observe(duration)
+            rag_requests_total.labels(bot_id="meddy", status="success").inc()
+
+            logger.info(f"RAG query completed in {duration:.2f}s")
+
+            return RAGQueryResponse(
+                thread_id=request.thread_id,
+                response=result.get("content", ""),
+                sources=None,  # TODO: Extract sources from RAG pipeline
+                metadata={"duration_seconds": duration},
+            )
+
+        except Exception as e:
+            logger.error(f"Error processing RAG query: {e}")
+            rag_requests_total.labels(bot_id="meddy", status="error").inc()
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e))
+            raise HTTPException(
+                status_code=500, detail=f"Error processing query: {str(e)}"
+            )
 
 
 # Qdrant endpoints
