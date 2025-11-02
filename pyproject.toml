@@ -70,7 +70,10 @@ frontend = [
     "streamlit==1.36.0",
     "tenacity>=8.5.0",
     "loguru==0.7.3",
-    "chainlit>=2.8.4",
+    "chainlit==2.8.3",
+    "asyncpg>=0.30.0",
+    "psycopg2-binary>=2.9.10",
+    "sqlalchemy==1.4.54",
 ]
 
 
