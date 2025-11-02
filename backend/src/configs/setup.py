@@ -5,12 +5,8 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from .prompt_templates import (
-    INTENT_DETECTION_PROMPT,
-    RAG_PROMPT,
-    REWRITE_USER_PROMPT,
-    SYSTEM_PROMPT,
-)
+from .prompt_templates import (INTENT_DETECTION_PROMPT, RAG_PROMPT,
+                               REWRITE_USER_PROMPT, SYSTEM_PROMPT)
 
 load_dotenv()
 

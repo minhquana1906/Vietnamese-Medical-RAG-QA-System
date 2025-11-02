@@ -1,7 +1,8 @@
 """Qwen3Guard service for content moderation and guardrails."""
 
-import httpx
 from typing import Dict, Optional, Tuple
+
+import httpx
 from loguru import logger
 
 from ..configs.setup import get_backend_settings

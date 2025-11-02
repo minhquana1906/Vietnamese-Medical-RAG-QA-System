@@ -3,7 +3,8 @@ import time
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+    OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -11,17 +12,13 @@ from prometheus_client import Counter, Histogram, make_asgi_app
 
 from .configs.setup import get_backend_settings
 from .core.vectorize import create_collection
+from .database import SessionLocal
 from .helpers import check_cache_health, check_database_health
 from .models import init_db, insert_document
-from .schemas.schema import (
-    RAGQueryRequest,
-    RAGQueryResponse,
-    HealthCheckResponse,
-    SystemHealthResponse,
-)
-from .database import SessionLocal
-from .tasks import chunk_and_index_document
+from .schemas.schema import (HealthCheckResponse, RAGQueryRequest,
+                             RAGQueryResponse, SystemHealthResponse)
 from .services.rag_service import handle_rag_query
+from .tasks import chunk_and_index_document
 
 settings = get_backend_settings()
 

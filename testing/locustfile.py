@@ -101,7 +101,7 @@ class SpikeTestUser(HttpUser):
         self.client.post(
             "/chat/complete",
             json={
-                "bot_id": "medical_bot",
+                "bot_id": "meddy",
                 "user_id": f"spike_user_{self.user_id}",
                 "user_message": query,
                 "is_sync_request": True,

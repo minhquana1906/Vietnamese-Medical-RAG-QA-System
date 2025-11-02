@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
 
@@ -56,7 +57,7 @@ def hybrid_search(
 ) -> List[Dict[str, Any]]:
     # Check cache first
     if use_cache:
-        from ..core.cache import get_search_results, cache_search_results
+        from ..core.cache import cache_search_results, get_search_results
 
         cached_results = get_search_results(query, search_type="hybrid")
         if cached_results:

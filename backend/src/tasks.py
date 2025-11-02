@@ -7,13 +7,9 @@ from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
 from .core.vectorize import search_vectors, upsert_points
 from .services.agent import ai_agent_handle
-from .services.brain import (
-    detect_route,
-    enhance_query_quality,
-    get_tavily_agent_answer,
-    openai_chat_complete,
-    openai_generate_embedding,
-)
+from .services.brain import (detect_route, enhance_query_quality,
+                             get_tavily_agent_answer, openai_chat_complete,
+                             openai_generate_embedding)
 from .services.chunking import dynamic_chunking
 from .services.rerank import cohere_rerank
 
