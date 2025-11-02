@@ -1,5 +1,6 @@
-import httpx
 from typing import List, Optional, Union
+
+import httpx
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
@@ -33,7 +34,7 @@ class Qwen3EmbeddingService:
     def embed_text(self, text: str, use_cache: bool = True) -> Optional[List[float]]:
         # Check cache first
         if use_cache:
-            from ..core.cache import get_query_embedding, cache_query_embedding
+            from ..core.cache import cache_query_embedding, get_query_embedding
 
             cached_embedding = get_query_embedding(text)
             if cached_embedding:

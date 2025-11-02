@@ -1,13 +1,14 @@
-from typing import List, Dict, Optional, Tuple
+import uuid as uuid_lib
 from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
+
 from loguru import logger
 from sqlalchemy.orm import Session
-import uuid as uuid_lib
 
-from ..models import User, Thread, Step
 from ..configs.setup import get_backend_settings
-from ..tasks import bot_route_answer_message
+from ..models import Step, Thread, User
 from ..services.summarizer import get_summarized_content
+from ..tasks import bot_route_answer_message
 
 settings = get_backend_settings()
 

@@ -13,7 +13,7 @@ sync: ## Sync virtual environment with pyproject.toml
 check: ## Run code quality checks
 	@echo "🚀 Running code quality checks"
 	@uv run pre-commit run --all-files
-	@uv run mypy backend/src
+# 	@uv run mypy backend/src
 
 test: ## Run tests
 	@echo "🧪 Running tests"

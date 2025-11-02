@@ -1,14 +1,6 @@
 from loguru import logger
-from sqlalchemy import (
-    Boolean,
-    Column,
-    ForeignKey,
-    Integer,
-    Text,
-    UniqueConstraint,
-    ARRAY,
-    TIMESTAMP,
-)
+from sqlalchemy import (ARRAY, TIMESTAMP, Boolean, Column, ForeignKey, Integer,
+                        Text, UniqueConstraint)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import DeclarativeMeta, declarative_base
 from sqlalchemy.future import select
