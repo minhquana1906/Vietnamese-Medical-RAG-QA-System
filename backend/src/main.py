@@ -1,7 +1,5 @@
-import asyncio
 import time
 
-from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 from opentelemetry import trace
@@ -16,13 +14,14 @@ from .core.vectorize import create_collection
 from .helpers import check_cache_health, check_database_health
 from .models import init_db, insert_document
 from .schemas.schema import (
-    CompleteRequest,
     RAGQueryRequest,
     RAGQueryResponse,
     HealthCheckResponse,
     SystemHealthResponse,
 )
-from .tasks import chunk_and_index_document, message_handler_task
+from .database import SessionLocal
+from .tasks import chunk_and_index_document
+from .services.rag_service import handle_rag_query
 
 settings = get_backend_settings()
 
@@ -124,7 +123,7 @@ def read_root():
     return {"message": f"Welcome to the {settings.app_name} API!"}
 
 
-@app.get("/ready")
+@app.get("/v1/ready")
 async def readiness_check():
     try:
         return {"status": "ready", "timestamp": time.time()}
@@ -133,229 +132,7 @@ async def readiness_check():
         raise HTTPException(status_code=503, detail="Service not ready")
 
 
-# Task endpoints
-@app.post("/chat/complete")
-async def chat_complete(request: CompleteRequest):
-    bot_id = request.bot_id
-    user_id = request.user_id
-    user_message = request.user_message
-    is_sync_request = request.is_sync_request
-
-    if not bot_id or not user_id or not user_message:
-        raise HTTPException(status_code=400, detail="Missing required fields")
-
-    logger.info(
-        f"[LEGACY] Chat request from user {user_id} to bot {bot_id}: {user_message}"
-    )
-
-    # Start tracing span
-    with tracer.start_as_current_span("chat_complete") as span:
-        span.set_attribute("bot_id", bot_id)
-        span.set_attribute("user_id", user_id)
-        span.set_attribute("is_sync", is_sync_request or False)
-
-        start_time = time.time()
-        try:
-            # Use user_id as identifier and create/find thread
-            # For legacy compatibility, we use user_id as the identifier
-            user_identifier = user_id
-
-            # Try to find or create a thread for this user
-            # In the legacy API, we don't have explicit thread_id, so we need to find/create one
-            from .database import SessionLocal
-            from .models import User, Thread
-            import uuid
-
-            with SessionLocal() as db:
-                # Find or create user
-                user = db.query(User).filter(User.identifier == user_identifier).first()
-                if not user:
-                    # Create legacy user for backward compatibility
-                    user = User(
-                        id=uuid.uuid4(),
-                        identifier=user_identifier,
-                        metadata_={"bot_id": bot_id, "legacy": True},  # Use metadata_
-                    )
-                    db.add(user)
-                    db.commit()
-                    db.refresh(user)
-
-                # Find or create active thread for this user
-                thread = (
-                    db.query(Thread)
-                    .filter(
-                        Thread.userId == user.id,
-                        Thread.metadata_["bot_id"].astext == bot_id,  # Use metadata_
-                    )
-                    .first()
-                )
-
-                if not thread:
-                    thread = Thread(
-                        id=uuid.uuid4(),
-                        userId=user.id,
-                        userIdentifier=user_identifier,
-                        name=f"Chat with {bot_id}",
-                        metadata_={"bot_id": bot_id, "legacy": True},  # Use metadata_
-                    )
-                    db.add(thread)
-                    db.commit()
-                    db.refresh(thread)
-
-                thread_id = thread.id
-
-            if is_sync_request:
-                response = message_handler_task(
-                    user_identifier, str(thread_id), user_message
-                )
-                duration = time.time() - start_time
-                rag_request_duration_seconds.labels(
-                    bot_id=bot_id, stage="complete"
-                ).observe(duration)
-                rag_requests_total.labels(bot_id=bot_id, status="success").inc()
-                return {"status": "completed", "response": response}
-            else:
-                response = message_handler_task.delay(
-                    user_identifier, str(thread_id), user_message
-                )
-                rag_requests_total.labels(bot_id=bot_id, status="queued").inc()
-                return {"status": "processing", "task_id": response.id}
-        except Exception as e:
-            logger.error(f"Error processing chat request: {e}")
-            rag_requests_total.labels(bot_id=bot_id, status="error").inc()
-            span.set_attribute("error", True)
-            span.set_attribute("error.message", str(e))
-            raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-@app.get("/chat/complete/{task_id}")
-async def get_chat_response(task_id: str):
-    start = time.time()
-    try:
-        while True:
-            task_result = AsyncResult(task_id)
-            task_status = task_result.status
-            if task_status == "PENDING" or task_status == "STARTED":
-                if time.time() - start > 60:
-                    return {
-                        "task_id": task_id,
-                        "status": task_result.status,
-                        "task_result": task_result.result,
-                        "error_message": "408 Request Timeout: The task is still pending after 60 seconds.",
-                    }
-                else:
-                    # Wait 0.5s before checking again
-                    await asyncio.sleep(0.5)
-            else:
-                return {
-                    "task_id": task_id,
-                    "status": task_result.status,
-                    "task_result": task_result.result,
-                }
-    except Exception as e:
-        logger.error(f"Error retrieving task {task_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-# ============= RAG QUERY ENDPOINT (for Chainlit frontend) =============
-
-
-@app.post("/rag/query", response_model=RAGQueryResponse)
-async def rag_query(request: RAGQueryRequest):
-    """
-    RAG query endpoint for Chainlit frontend.
-
-    This endpoint is called by the Chainlit UI to process user queries.
-    Backend handles all logic: user management, thread management, RAG pipeline.
-
-    Args:
-        request: RAGQueryRequest with user_identifier, thread_id, query
-
-    Returns:
-        RAGQueryResponse with thread_id, response, sources
-    """
-    logger.info(
-        f"RAG query from user={request.user_identifier}, thread={request.thread_id}"
-    )
-
-    with tracer.start_as_current_span("rag_query") as span:
-        span.set_attribute("user_identifier", request.user_identifier)
-        span.set_attribute("thread_id", request.thread_id)
-
-        start_time = time.time()
-        try:
-            # Call message handler task synchronously
-            result = message_handler_task(
-                request.user_identifier, request.thread_id, request.query
-            )
-
-            duration = time.time() - start_time
-            rag_request_duration_seconds.labels(
-                bot_id="meddy", stage="complete"
-            ).observe(duration)
-            rag_requests_total.labels(bot_id="meddy", status="success").inc()
-
-            logger.info(f"RAG query completed in {duration:.2f}s")
-
-            return RAGQueryResponse(
-                thread_id=request.thread_id,
-                response=result.get("content", ""),
-                sources=None,  # TODO: Extract sources from RAG pipeline
-                metadata={"duration_seconds": duration},
-            )
-
-        except Exception as e:
-            logger.error(f"Error processing RAG query: {e}")
-            rag_requests_total.labels(bot_id="meddy", status="error").inc()
-            span.set_attribute("error", True)
-            span.set_attribute("error.message", str(e))
-            raise HTTPException(
-                status_code=500, detail=f"Error processing query: {str(e)}"
-            )
-
-
-# Qdrant endpoints
-@app.post("/collections/create")
-def create_collection_endpoint(
-    collection_name: str = settings.default_collection_name,
-    vector_size: int = settings.vector_dimension,
-):
-    try:
-        status = create_collection(collection_name, vector_size)
-        return {"status": status}
-    except Exception as e:
-        logger.error(f"Error creating collection via endpoint: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-@app.post("/documents/create")
-def insert_document_endpoint(title: str, content: str):
-    with tracer.start_as_current_span("insert_document") as span:
-        span.set_attribute("document.title", title)
-        start_time = time.time()
-        try:
-            new_docs = insert_document(title, content)
-            doc_id = str(new_docs.id)
-            chunk_and_index_document.delay(doc_id, title, content)
-            document_indexing_total.labels(status="queued").inc()
-            duration = time.time() - start_time
-            document_indexing_duration_seconds.observe(duration)
-            return {
-                "status": "Document received and indexing started.",
-                "document_id": doc_id,
-            }
-        except Exception as e:
-            logger.error(f"Error inserting document via endpoint: {e}")
-            document_indexing_total.labels(status="error").inc()
-            span.set_attribute("error", True)
-            span.set_attribute("error.message", str(e))
-            raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-# ============= HEALTH CHECK ENDPOINTS =============
-
-
-@app.get("/health", response_model=SystemHealthResponse)
+@app.get("/v1/health", response_model=SystemHealthResponse)
 async def health_check():
     with tracer.start_as_current_span("health_check"):
         # Check API
@@ -386,11 +163,81 @@ async def health_check():
         )
 
 
-@app.get("/health/db", response_model=HealthCheckResponse)
-async def health_check_database():
-    return await check_database_health()
+@app.post("/v1/rag/query", response_model=RAGQueryResponse)
+async def rag_query(request: RAGQueryRequest):
+    logger.info(
+        f"RAG query from user={request.user_identifier}, thread={request.thread_id}"
+    )
+
+    with tracer.start_as_current_span("rag_query") as span:
+        span.set_attribute("user_identifier", request.user_identifier)
+        span.set_attribute("thread_id", request.thread_id)
+
+        start_time = time.time()
+        try:
+            with SessionLocal() as db:
+                response, sources = handle_rag_query(
+                    db, request.user_identifier, request.thread_id, request.query
+                )
+
+            duration = time.time() - start_time
+            rag_request_duration_seconds.labels(
+                bot_id="meddy", stage="complete"
+            ).observe(duration)
+            rag_requests_total.labels(bot_id="meddy", status="success").inc()
+
+            logger.info(f"RAG query completed in {duration:.2f}s")
+
+            return RAGQueryResponse(
+                thread_id=request.thread_id,
+                response=response,
+                sources=sources,
+                metadata={"duration_seconds": duration},
+            )
+
+        except Exception as e:
+            logger.error(f"Error processing RAG query: {e}")
+            rag_requests_total.labels(bot_id="meddy", status="error").inc()
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e))
+            raise HTTPException(
+                status_code=500, detail=f"Error processing query: {str(e)}"
+            )
 
 
-@app.get("/health/cache", response_model=HealthCheckResponse)
-async def health_check_cache():
-    return await check_cache_health()
+# Qdrant endpoints
+@app.post("/v1/collections/create")
+def create_collection_endpoint(
+    collection_name: str = settings.default_collection_name,
+    vector_size: int = settings.vector_dimension,
+):
+    try:
+        status = create_collection(collection_name, vector_size)
+        return {"status": status}
+    except Exception as e:
+        logger.error(f"Error creating collection via endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+@app.post("/v1/documents/create")
+def insert_document_endpoint(title: str, content: str):
+    with tracer.start_as_current_span("insert_document") as span:
+        span.set_attribute("document.title", title)
+        start_time = time.time()
+        try:
+            new_docs = insert_document(title, content)
+            doc_id = str(new_docs.id)
+            chunk_and_index_document.delay(doc_id, title, content)
+            document_indexing_total.labels(status="queued").inc()
+            duration = time.time() - start_time
+            document_indexing_duration_seconds.observe(duration)
+            return {
+                "status": "Document received and indexing started.",
+                "document_id": doc_id,
+            }
+        except Exception as e:
+            logger.error(f"Error inserting document via endpoint: {e}")
+            document_indexing_total.labels(status="error").inc()
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e))
+            raise HTTPException(status_code=500, detail="Internal server error.")

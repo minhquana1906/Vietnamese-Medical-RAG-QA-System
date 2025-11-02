@@ -6,8 +6,6 @@ from loguru import logger
 from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
 from .core.vectorize import search_vectors, upsert_points
-from .database import SessionLocal
-from .models import Thread, Step, User
 from .services.agent import ai_agent_handle
 from .services.brain import (
     detect_route,
@@ -18,7 +16,6 @@ from .services.brain import (
 )
 from .services.chunking import dynamic_chunking
 from .services.rerank import cohere_rerank
-from .services.summarizer import get_summarized_content
 
 settings = get_backend_settings()
 
@@ -146,123 +143,3 @@ def rag_qa_task(history, question):
     except Exception as e:
         logger.error(f"Error in RAG QA task: {e}")
         raise
-
-
-@shared_task
-def message_handler_task(user_identifier, thread_id, query):
-    """
-    Handle incoming messages using Chainlit schema.
-
-    Args:
-        user_identifier: Chainlit user identifier (from User.identifier)
-        thread_id: UUID of the thread (conversation)
-        query: User's question
-
-    Returns:
-        dict: Response with role and content
-    """
-    logger.info(f"Message handler started: user={user_identifier}, thread={thread_id}")
-
-    try:
-        with SessionLocal() as db:
-            # Find the user by identifier
-            user = db.query(User).filter(User.identifier == user_identifier).first()
-
-            if not user:
-                logger.error(f"User not found: {user_identifier}")
-                return {
-                    "role": "assistant",
-                    "content": "Xin lỗi, không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.",
-                }
-
-            # Find or create thread
-            thread = db.query(Thread).filter(Thread.id == thread_id).first()
-
-            if not thread:
-                # Create new thread if it doesn't exist
-                thread = Thread(
-                    id=thread_id,
-                    userId=user.id,
-                    userIdentifier=user_identifier,
-                    name=f"Medical Consultation",
-                    metadata_={"created_by": "message_handler_task"},  # Use metadata_
-                )
-                db.add(thread)
-                db.flush()
-                logger.info(f"Created new thread: {thread_id}")
-
-            # Create user message step
-            import uuid as uuid_lib
-
-            user_step = Step(
-                id=uuid_lib.uuid4(),
-                name="user_message",
-                type="user_message",
-                threadId=thread.id,
-                streaming=False,
-                input=query,
-                output=query,
-                metadata_={"role": "user"},  # Use metadata_
-            )
-            db.add(user_step)
-            db.commit()
-
-            # Get conversation history from previous steps
-            previous_steps = (
-                db.query(Step)
-                .filter(Step.threadId == thread.id)
-                .filter(Step.type.in_(["user_message", "assistant_message"]))
-                .order_by(Step.createdAt)
-                .all()
-            )
-
-            # Convert to format expected by LLM
-            messages = [{"role": "system", "content": settings.system_prompt}]
-            for step in previous_steps:
-                # Determine role from step metadata or type
-                role = (
-                    step.metadata_.get("role", "user") if step.metadata_ else "user"
-                )  # Use metadata_
-                if step.type == "assistant_message":
-                    role = "assistant"
-
-                content = step.output if step.output else step.input
-                if content:
-                    messages.append({"role": role, "content": content})
-
-            logger.info(f"Thread {thread.id}: {len(messages)} messages in history")
-
-            # Get answer from RAG (history excludes system prompt)
-            history = messages[1:-1]  # Exclude system prompt and current query
-            answer = bot_route_answer_message(history, query)
-            logger.info(f"Generated response for thread {thread.id}")
-
-            # Summarize and save the response
-            summarized_answer = get_summarized_content(answer)
-
-            # Create assistant message step
-            assistant_step = Step(
-                id=uuid_lib.uuid4(),
-                name="assistant_message",
-                type="assistant_message",
-                threadId=thread.id,
-                streaming=False,
-                input=query,
-                output=summarized_answer,
-                metadata_={"role": "assistant"},  # Use metadata_
-            )
-            db.add(assistant_step)
-            db.commit()
-
-            logger.info(
-                f"Message handler completed: user={user_identifier}, thread={thread_id}"
-            )
-
-            return {"role": "assistant", "content": answer}
-
-    except Exception as e:
-        logger.error(f"Error in message handler: {e}")
-        return {
-            "role": "assistant",
-            "content": "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi.",
-        }
