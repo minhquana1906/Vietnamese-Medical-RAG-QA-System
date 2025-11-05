@@ -1,13 +1,12 @@
 import os
 import uuid
-import chainlit as cl
 from typing import Optional
 
-from loguru import logger
+import chainlit as cl
 from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
 from chainlit.types import ThreadDict
-
-from helpers import call_rag_api, simulate_streaming, DATABASE_URL
+from helpers import DATABASE_URL, call_rag_api, simulate_streaming
+from loguru import logger
 
 
 @cl.data_layer
@@ -71,11 +70,11 @@ async def on_chat_start():
 
     logger.info(f"User authenticated: {user_identifier} ({user_name})")
 
-    thread_id = cl.user_session.get("thread_id")
-    if not thread_id:
-        thread_id = str(uuid.uuid4())
-        cl.user_session.set("thread_id", thread_id)
+    # Lấy thread_id từ Chainlit context (được tự động tạo bởi Chainlit)
+    thread_id = cl.context.session.thread_id
 
+    # Lưu vào session
+    cl.user_session.set("thread_id", thread_id)
     cl.user_session.set("user_identifier", user_identifier)
 
     logger.info(f"Chat started: user={user_identifier}, thread={thread_id}")
@@ -95,12 +94,18 @@ async def on_message(message: cl.Message):
     user_identifier = user.identifier
     user_message = message.content
 
-    # Get or create thread ID
-    thread_id = cl.user_session.get("thread_id")
+    # Lấy thread_id từ Chainlit context
+    thread_id = cl.context.session.thread_id
+
     if not thread_id:
-        thread_id = str(uuid.uuid4())
-        cl.user_session.set("thread_id", thread_id)
-        logger.info(f"Created new thread: {thread_id} for user: {user_identifier}")
+        logger.error("No thread_id found in Chainlit context")
+        await cl.Message(
+            content="❌ **Lỗi hệ thống.**\n\nKhông tìm thấy thread ID. Vui lòng làm mới trang.",
+            author="system",
+        ).send()
+        return
+
+    logger.info(f"Processing message: user={user_identifier}, thread={thread_id}")
 
     # Create response message with typing indicator
     response_message = cl.Message(content="", author="Meddy")
@@ -153,20 +158,24 @@ async def on_message(message: cl.Message):
 @cl.on_chat_end
 async def on_chat_end():
     user_identifier = cl.user_session.get("user_identifier")
-    thread_id = cl.user_session.get("thread_id")
+    thread_id = cl.context.session.thread_id
     logger.info(f"Chat ended: user={user_identifier}, thread={thread_id}")
 
 
 @cl.on_chat_resume
 async def on_chat_resume(thread: ThreadDict):
-    cl.user_session.set("chat_history", [])
+    """
+    Được gọi khi user resume một cuộc trò chuyện cũ
+    Chainlit tự động load lại thread và history
+    """
+    user = cl.user_session.get("user")
+    if not user:
+        return
 
-    for message in thread["steps"]:
-        if message["type"] == "user_message":
-            cl.user_session.get("chat_history").append(
-                {"role": "user", "content": message["output"]}
-            )
-        elif message["type"] == "assistant_message":
-            cl.user_session.get("chat_history").append(
-                {"role": "assistant", "content": message["output"]}
-            )
+    user_identifier = user.identifier
+    thread_id = thread.get("id")
+
+    cl.user_session.set("thread_id", thread_id)
+    cl.user_session.set("user_identifier", user_identifier)
+
+    logger.info(f"Chat resumed: user={user_identifier}, thread={thread_id}")
