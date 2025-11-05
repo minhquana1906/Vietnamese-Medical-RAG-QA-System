@@ -23,7 +23,7 @@ def get_or_create_user(
             id=uuid_lib.uuid4(),
             identifier=user_identifier,
             metadata_=metadata or {},
-            createdAt=datetime.now(timezone.utc).isoformat(),  # Set proper timestamp
+            createdAt=datetime.now(timezone.utc).isoformat(),
         )
         db.add(user)
         db.commit()
@@ -33,30 +33,9 @@ def get_or_create_user(
     return user
 
 
-def get_or_create_thread(
-    db: Session,
-    thread_id: str,
-    user: User,
-    thread_name: Optional[str] = None,
-    metadata: Optional[Dict] = None,
-) -> Thread:
-    thread = db.query(Thread).filter(Thread.id == thread_id).first()
-
-    if not thread:
-        thread = Thread(
-            id=thread_id,
-            userId=user.id,
-            userIdentifier=user.identifier,
-            name=thread_name,
-            createdAt=datetime.now(timezone.utc).isoformat(),
-            metadata_=metadata or {},
-        )
-        db.add(thread)
-        db.commit()
-        db.refresh(thread)
-        logger.info(f"Created new thread: {thread_id} for user: {user.identifier}")
-
-    return thread
+def get_thread(db: Session, thread_id: str) -> Optional[Thread]:
+    """Get thread by ID without creating it"""
+    return db.query(Thread).filter(Thread.id == thread_id).first()
 
 
 def save_user_message(db: Session, thread: Thread, query: str) -> Step:
@@ -110,7 +89,6 @@ def get_conversation_history(db: Session, thread: Thread) -> List[Dict[str, str]
 
     messages = []
     for step in previous_steps:
-        # Determine role from step metadata or type
         role = step.metadata_.get("role", "user") if step.metadata_ else "user"
         if step.type == "assistant_message":
             role = "assistant"
@@ -137,16 +115,17 @@ def handle_rag_query(
 ) -> Tuple[str, Optional[List[Dict]]]:
     """
     Handle complete RAG query flow:
-    1. Get/create user and thread
-    2. Save user message
-    3. Get conversation history
-    4. Call RAG pipeline
-    5. Save assistant response
+    1. Get user (create if not exists)
+    2. Get thread (must already exist from Chainlit)
+    3. Save user message
+    4. Get conversation history
+    5. Call RAG pipeline
+    6. Save assistant response
 
     Args:
         db: Database session
         user_identifier: User identifier from OAuth
-        thread_id: Thread UUID
+        thread_id: Thread UUID from Chainlit
         query: User's question
 
     Returns:
@@ -154,8 +133,8 @@ def handle_rag_query(
     """
     logger.info(f"Handling RAG query: user={user_identifier}, thread={thread_id}")
 
+    # Get or create user
     user = get_or_create_user(db, user_identifier)
-
     if not user:
         logger.error(f"Failed to get/create user: {user_identifier}")
         return (
@@ -163,16 +142,23 @@ def handle_rag_query(
             None,
         )
 
-    thread = get_or_create_thread(db, thread_id, user)
+    # Get thread (must exist from Chainlit)
+    thread = get_thread(db, thread_id)
+    if not thread:
+        logger.error(f"Thread {thread_id} not found. It should be created by Chainlit.")
+        return (
+            "❌ Không tìm thấy cuộc trò chuyện. Vui lòng làm mới trang và thử lại.",
+            None,
+        )
 
+    # Save user message
     save_user_message(db, thread, query)
 
+    # Get conversation history
     history = get_conversation_history(db, thread)
-
     messages = prepare_messages_for_llm(history)
 
     # Extract history for RAG (exclude system prompt and current query)
-    # Since we saved user message, we need to exclude the last message
     rag_history = messages[1:-1] if len(messages) > 1 else []
 
     logger.info(f"Thread {thread.id}: {len(rag_history)} messages in history")
