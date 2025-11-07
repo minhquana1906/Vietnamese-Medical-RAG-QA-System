@@ -117,10 +117,9 @@ def handle_rag_query(
     Handle complete RAG query flow:
     1. Get user (create if not exists)
     2. Get thread (must already exist from Chainlit)
-    3. Save user message
-    4. Get conversation history
-    5. Call RAG pipeline
-    6. Save assistant response
+    3. Get conversation history (Chainlit auto-saves messages)
+    4. Call RAG pipeline
+    5. Return response (Chainlit will save it)
 
     Args:
         db: Database session
@@ -151,15 +150,15 @@ def handle_rag_query(
             None,
         )
 
-    # Save user message
-    save_user_message(db, thread, query)
-
-    # Get conversation history
+    # Get conversation history (excluding the current query as it hasn't been saved yet)
     history = get_conversation_history(db, thread)
+
+    # Prepare messages for LLM (add system prompt)
     messages = prepare_messages_for_llm(history)
 
-    # Extract history for RAG (exclude system prompt and current query)
-    rag_history = messages[1:-1] if len(messages) > 1 else []
+    # Extract history for RAG (exclude system prompt)
+    # Include all history since Chainlit handles message saving
+    rag_history = messages[1:] if len(messages) > 1 else []
 
     logger.info(f"Thread {thread.id}: {len(rag_history)} messages in history")
 
@@ -171,13 +170,10 @@ def handle_rag_query(
         logger.error(f"Error in RAG pipeline: {e}")
         response = "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
 
-    # Summarize and save assistant response
-    summarized_response = get_summarized_content(response)
-    save_assistant_message(db, thread, query, response, summarized_response)
-
     logger.info(f"RAG query completed: user={user_identifier}, thread={thread_id}")
 
     # TODO: Extract sources from RAG pipeline
     sources = None
 
+    # Return response - Chainlit will automatically save both user message and assistant response
     return response, sources
