@@ -1,14 +1,24 @@
 <!--
 Sync Impact Report:
-Version Change: 1.0.0 → 2.0.0
-Modified Principles: Technology Stack - Frontend framework changed from Streamlit to Chainlit
-Added Sections: Chainlit frontend rationale
-Removed Sections: Streamlit reference from Technology Stack
+Version Change: 2.0.0 → 2.1.0
+Modified Principles:
+  - Technology Stack: Added PostgreSQL 18, removed password auth references
+  - Schema Simplification: Adopt Chainlit standard schema (users, threads, steps, elements, feedbacks)
+  - Authentication: OAuth only (Google, GitHub) - no passwords, no JWT
+Added Sections:
+  - Database simplification principle
+  - OAuth-only authentication rationale
+Removed Sections:
+  - JWT and password authentication references
 Templates Status:
-  - ✅ plan-template.md: Constitution checks aligned with MVP principles
-  - ✅ spec-template.md: Requirements structure compatible with MVP approach
+  - ✅ plan-template.md: Constitution checks aligned with simplified architecture
+  - ✅ spec-template.md: Requirements compatible with Chainlit integration
   - ✅ tasks-template.md: Task organization supports modular implementation
-Follow-up TODOs: None
+  - ✅ copilot-instructions.md: Schema simplification documented
+Follow-up TODOs:
+  - Update /specs/001-improve-rag-system/spec.md with schema changes
+  - Update /specs/001-improve-rag-system/plan.md with OAuth approach
+  - Update /specs/001-improve-rag-system/tasks.md with simplified tasks
 -->
 
 # Vietnamese Medical RAG QA System Constitution
@@ -104,7 +114,8 @@ Follow-up TODOs: None
 
 - **Language**: Python 3.12
 - **Backend Framework**: FastAPI 0.112.2
-- **Frontend**: Chainlit 1.3.2 (replacing Streamlit for RAG-native chat experience)
+- **Frontend**: Chainlit 1.3.2 (RAG-native UI with OAuth authentication)
+- **Database**: PostgreSQL 18 (Chainlit standard schema)
 - **Vector DB**: Qdrant 1.10.1
 - **Cache/Queue**: Redis 5.0.7 (with Celery 5.4.0)
 - **Search**: Elasticsearch 8.11.0 (BM25 keyword search)
@@ -112,13 +123,21 @@ Follow-up TODOs: None
 - **Reranking**: Cohere (rerank-multilingual-v3.0)
 - **Deployment**: Docker Compose with separate containers (API, Worker, DBs)
 
-**Frontend Framework Rationale**: Chainlit 1.3.2 replaces Streamlit as it provides:
+**Frontend Framework Rationale**: Chainlit 1.3.2 provides:
 
 - Native RAG features (streaming responses, conversation history, session management)
-- Built-in authentication (email/password + OAuth: Google, GitHub)
-- Persistent chat sessions with SQLAlchemy integration
+- Built-in OAuth authentication (Google, GitHub) - no password complexity
+- Persistent chat sessions with standard SQLAlchemy schema
 - Superior UX for medical consultation workflows
-- Better alignment with production chat application requirements
+- Eliminates need for custom User/ChatSession/Message tables
+
+**Database Schema Approach**:
+
+- Use Chainlit standard schema (users, threads, steps, elements, feedbacks) for chat functionality
+- Keep separate simple tables for medical content (documents, chunks)
+- No custom authentication tables - OAuth handled by Chainlit
+- No JWT tokens - session management built-in
+- Reference: [Chainlit Data Layer Documentation](https://docs.chainlit.io/data-layers/sqlalchemy)
 
 ### External Services
 
@@ -199,13 +218,16 @@ When MVP transitions to production:
 - Testing principles will be added (TDD, integration tests)
 - Environment separation will be required
 - Documentation standards will increase
-- This constitution will be amended to v2.0.0
+- This constitution will be amended to v3.0.0
 
-**Version**: 2.0.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-10-31
+**Version**: 2.1.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-11-15
 
 **Changelog**:
 
+- **v2.1.0** (2025-11-15): MINOR - Added PostgreSQL 18, schema simplification (Chainlit standard), OAuth-only authentication
 - **v2.0.0** (2025-10-31): MAJOR - Updated frontend framework from Streamlit to Chainlit 1.3.2 for RAG-native features
 - **v1.0.0** (2025-10-29): Initial constitution ratification
 
+```markdown
+<!-- End of Constitution -->
 ```
