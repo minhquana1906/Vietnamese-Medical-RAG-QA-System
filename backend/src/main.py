@@ -1,10 +1,12 @@
 import time
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from loguru import logger
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-    OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -15,8 +17,12 @@ from .core.vectorize import create_collection
 from .database import SessionLocal
 from .helpers import check_cache_health, check_database_health
 from .models import init_db, insert_document
-from .schemas.schema import (HealthCheckResponse, RAGQueryRequest,
-                             RAGQueryResponse, SystemHealthResponse)
+from .schemas.schema import (
+    HealthCheckResponse,
+    RAGQueryRequest,
+    RAGQueryResponse,
+    SystemHealthResponse,
+)
 from .services.rag_service import handle_rag_query
 from .tasks import chunk_and_index_document
 

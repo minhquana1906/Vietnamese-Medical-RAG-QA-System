@@ -6,6 +6,12 @@ import yaml
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
+from ..core.model_config import (
+    get_reranking_model,
+    get_reranking_triton_name,
+    get_reranking_fallback,
+    get_triton_http_url,
+)
 
 settings = get_backend_settings()
 
@@ -15,12 +21,27 @@ class Qwen3RerankerService:
     def __init__(
         self,
         triton_url: Optional[str] = None,
-        model_name: str = "qwen3_reranker",
+        model_name: Optional[str] = None,
         cohere_fallback: bool = True,
     ):
+        """
+        Initialize Qwen3 Reranker Service with Triton backend.
 
-        self.triton_url = triton_url or settings.triton_http_url
-        self.model_name = model_name
+        Args:
+            triton_url: Triton server URL (if None, uses config)
+            model_name: Triton model name (if None, uses config)
+            cohere_fallback: Enable Cohere fallback if Triton fails
+        """
+        # Get config values
+        self.triton_url = triton_url or get_triton_http_url()
+        self.model_name = model_name or get_reranking_triton_name()
+        self.huggingface_model = get_reranking_model()  # For logging
+
+        logger.info(
+            f"Initialized Qwen3RerankerService: "
+            f"HF={self.huggingface_model}, Triton={self.model_name}"
+        )
+
         self.cohere_fallback = cohere_fallback
         self.client = httpx.Client(timeout=30.0)
 
@@ -147,17 +168,24 @@ def get_cohere_client():
 def cohere_rerank(
     query: str,
     relevant_docs: List[Dict[str, Any]],
-    model: str = settings.cohere_rerank_model,
+    model: Optional[str] = None,
     top_n: int = 5,
 ) -> Tuple[List[Dict[str, Any]], str]:
+    """Rerank documents using Cohere API."""
     try:
+        # Use fallback model from config if not specified
+        if model is None:
+            model = get_reranking_fallback()
+
         client = get_cohere_client()
         yaml_docs = [yaml.dump(doc, sort_keys=False) for doc in relevant_docs]
 
         reranked_documents = client.rerank(
             query=query, documents=yaml_docs, model=model, top_n=top_n
         ).results
-        logger.debug(f"Reranked documents: {reranked_documents}")
+        logger.debug(
+            f"Reranked documents with Cohere model={model}: {reranked_documents}"
+        )
 
         rerank_context = "\n\n".join(
             [
@@ -165,10 +193,10 @@ def cohere_rerank(
                 for rank, doc in enumerate(reranked_documents, start=1)
             ]
         )
-        logger.info(f"Reranked {len(reranked_documents)} docs: {rerank_context}")
+        logger.info(f"Reranked {len(reranked_documents)} docs with Cohere")
 
         result = (reranked_documents, rerank_context)
         return result
     except Exception as e:
-        logger.error(f"Error reranking documents: {e}")
+        logger.error(f"Error reranking documents with Cohere: {e}")
         raise

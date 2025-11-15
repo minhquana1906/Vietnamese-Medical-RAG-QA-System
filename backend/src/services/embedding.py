@@ -4,6 +4,12 @@ import httpx
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
+from ..core.model_config import (
+    get_embedding_model,
+    get_embedding_triton_name,
+    get_embedding_fallback,
+    get_triton_http_url,
+)
 
 settings = get_backend_settings()
 
@@ -13,11 +19,27 @@ class Qwen3EmbeddingService:
     def __init__(
         self,
         triton_url: Optional[str] = None,
-        model_name: str = "qwen3_embedding",
+        model_name: Optional[str] = None,
         openai_fallback: bool = True,
     ):
-        self.triton_url = triton_url or settings.triton_http_url
-        self.model_name = model_name
+        """
+        Initialize Qwen3 Embedding Service with Triton backend.
+
+        Args:
+            triton_url: Triton server URL (if None, uses config)
+            model_name: Triton model name (if None, uses config)
+            openai_fallback: Enable OpenAI fallback if Triton fails
+        """
+        # Get config values
+        self.triton_url = triton_url or get_triton_http_url()
+        self.model_name = model_name or get_embedding_triton_name()
+        self.huggingface_model = get_embedding_model()  # For logging
+
+        logger.info(
+            f"Initialized Qwen3EmbeddingService: "
+            f"HF={self.huggingface_model}, Triton={self.model_name}"
+        )
+
         self.openai_fallback = openai_fallback
         self.client = httpx.Client(timeout=30.0)
         self.openai_client = None
@@ -26,7 +48,8 @@ class Qwen3EmbeddingService:
                 from openai import OpenAI
 
                 self.openai_client = OpenAI(api_key=settings.openai_api_key)
-                logger.info("OpenAI fallback enabled for embeddings")
+                fallback_model = get_embedding_fallback()
+                logger.info(f"OpenAI fallback enabled: {fallback_model}")
             except ImportError:
                 logger.warning("OpenAI library not available, fallback disabled")
                 self.openai_fallback = False
@@ -154,12 +177,15 @@ class Qwen3EmbeddingService:
             return None
 
         try:
+            fallback_model = get_embedding_fallback()
             response = self.openai_client.embeddings.create(
-                model=settings.openai_embedding_model,
+                model=fallback_model,
                 input=text,
             )
             embedding = response.data[0].embedding
-            logger.debug(f"OpenAI embedding generated for text: {text[:50]}...")
+            logger.debug(
+                f"OpenAI embedding generated (model={fallback_model}): {text[:50]}..."
+            )
             return embedding
         except Exception as e:
             logger.error(f"Error calling OpenAI for embedding: {e}")
