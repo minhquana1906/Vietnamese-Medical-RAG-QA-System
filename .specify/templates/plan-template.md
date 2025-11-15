@@ -45,7 +45,8 @@
 
 - **Language**: Python 3.12 ✅
 - **Backend**: FastAPI 0.112.2 ✅
-- **Frontend**: Streamlit 1.36.0 (if UI needed) ✅
+- **Frontend**: Chainlit 1.3.2 (RAG-native UI with OAuth) ✅
+- **Database**: PostgreSQL 18 (Chainlit standard schema) ✅
 - **Vector DB**: Qdrant 1.10.1 ✅
 - **Cache/Queue**: Redis 5.0.7 + Celery 5.4.0 ✅
 - **Search**: Elasticsearch 8.11.0 (if keyword search needed) ⚠️

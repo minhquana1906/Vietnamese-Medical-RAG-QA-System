@@ -1,44 +1,85 @@
-# Constitution Update Summary
+# Constitution Update Summary# Constitution Update Summary
 
-**Date**: 2025-10-29
-**Version**: 1.0.0 (Initial Creation)
 
-## Changes Applied
 
-### Constitution File (`.specify/memory/constitution.md`)
+**Date**: 2025-11-15**Date**: 2025-10-29
 
-**Status**: ✅ Created and ratified
+**Version**: 2.0.0 → 2.1.0 (MINOR)**Version**: 1.0.0 (Initial Creation)
+
+
+
+## Changes## Changes Applied
+
+
+
+### Technology Stack### Constitution File (`.specify/memory/constitution.md`)
+
+- ✅ Added PostgreSQL 18
+
+- ✅ OAuth-only (Google, GitHub) - removed password/JWT**Status**: ✅ Created and ratified
+
+- ✅ Chainlit standard schema
 
 **Core Principles Defined**:
-1. **MVP First - Production Later**: Prioritizes working functionality over production-grade standards during MVP
-2. **Modular Architecture**: Enforces focused, single-purpose modules with clear separation
-3. **No Test-Driven Development**: Explicitly defers TDD and comprehensive testing for MVP velocity
-4. **Minimal Documentation**: Keeps documentation concise and purpose-driven
+
+### Database Simplification1. **MVP First - Production Later**: Prioritizes working functionality over production-grade standards during MVP
+
+- Chainlit schema: users, threads, steps, elements, feedbacks2. **Modular Architecture**: Enforces focused, single-purpose modules with clear separation
+
+- Medical content: documents, chunks (simple)3. **No Test-Driven Development**: Explicitly defers TDD and comprehensive testing for MVP velocity
+
+- No custom auth tables4. **Minimal Documentation**: Keeps documentation concise and purpose-driven
+
 5. **Working Code Over Perfect Code**: Prioritizes functional solutions and marks legacy code
-6. **Async Task Execution**: Leverages Celery for long-running RAG operations
-7. **Observability Through Structured Logging**: Uses Loguru for debugging and monitoring
 
-**Technology Stack Defined**:
+### Rationale6. **Async Task Execution**: Leverages Celery for long-running RAG operations
+
+- Simplifies auth complexity7. **Observability Through Structured Logging**: Uses Loguru for debugging and monitoring
+
+- Leverages Chainlit built-in session management
+
+- Focus on medical RAG, not auth infrastructure**Technology Stack Defined**:
+
 - Python 3.12, FastAPI 0.112.2, Streamlit 1.36.0
-- Qdrant 1.10.1, Redis 5.0.7, Elasticsearch 8.11.0
-- OpenAI, Deepseek, Cohere APIs
-- Docker Compose deployment
 
-**Governance Framework**:
-- Constitution authority and amendment process
+## Templates Validated- Qdrant 1.10.1, Redis 5.0.7, Elasticsearch 8.11.0
+
+- OpenAI, Deepseek, Cohere APIs
+
+- ✅ plan-template.md- Docker Compose deployment
+
+- ✅ spec-template.md
+
+- ✅ tasks-template.md**Governance Framework**:
+
+- ✅ copilot-instructions.md- Constitution authority and amendment process
+
 - Semantic versioning for constitution changes
-- Compliance requirements for PRs and features
+
+## Follow-up- Compliance requirements for PRs and features
+
 - Future transition plan to production standards
 
-### Template Updates
+Update `/specs/001-improve-rag-system/`:
 
-#### 1. `plan-template.md`
+- spec.md### Template Updates
+
+- plan.md
+
+- tasks.md#### 1. `plan-template.md`
+
 **Status**: ✅ Updated
 
+## Commit
+
 **Changes**:
-- Added MVP Phase Compliance checklist
-- Added Technology Stack Verification section
-- Updated Constitution Check to reflect actual project principles
+
+```bash- Added MVP Phase Compliance checklist
+
+git commit -m "docs: update constitution to v2.1.0 (PostgreSQL 18 + OAuth + schema simplification)"- Added Technology Stack Verification section
+
+```- Updated Constitution Check to reflect actual project principles
+
 - Simplified violations tracking for MVP context
 
 #### 2. `spec-template.md`

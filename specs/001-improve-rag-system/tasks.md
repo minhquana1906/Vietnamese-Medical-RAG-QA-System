@@ -152,17 +152,17 @@
 - [ ] T065 [US2] Run fine-tuning for embedding model on vietnamese-medical-dataset
 - [ ] T066 [US2] Compare fine-tuned vs baseline and verify >= 2% improvement threshold
 - [ ] T067 [US2] Upload fine-tuned models to HuggingFace Hub with detailed model cards
-- [ ] T068 [P] [US2] Create serving/vllm/serve_generation.sh script to start vLLM with fine-tuned generation model
-- [ ] T069 [P] [US2] Create serving/triton/models/qwen3_embedding/config.pbtxt for Triton model config
-- [ ] T070 [P] [US2] Create serving/triton/models/qwen3_embedding/1/model.py with Python backend for embedding model
-- [ ] T071 [P] [US2] Create serving/triton/models/qwen3_reranker/config.pbtxt and 1/model.py for reranker
-- [ ] T072 [P] [US2] Create serving/triton/models/qwen3_guard/config.pbtxt and 1/model.py for guardrails
-- [ ] T073 [US2] Implement model registration endpoint in backend/src/main.py: POST /models per models-api.yaml
-- [ ] T074 [P] [US2] Implement model detail endpoints in backend/src/main.py: GET /models, GET /models/{model_id} per models-api.yaml
-- [ ] T075 [P] [US2] Implement model deployment endpoints in backend/src/main.py: POST /models/{model_id}/deploy, POST /models/{model_id}/undeploy, GET /models/deployed per models-api.yaml
-- [ ] T076 [US2] Update backend/src/services/brain.py to dynamically load deployed generation model from database
-- [ ] T077 [US2] Update backend/src/services/embedding.py to use deployed embedding model from Triton
-- [ ] T078 [US2] Update backend/src/services/rerank.py to use deployed reranker from Triton
+- [X] T068 [P] [US2] Create serving/vllm/serve_generation.sh script to start vLLM with base generation model
+- [X] T069 [P] [US2] Create serving/triton/models/qwen3_embedding/config.pbtxt for Triton model config
+- [X] T070 [P] [US2] Create serving/triton/models/qwen3_embedding/1/model.py with Python backend for embedding model
+- [X] T071 [P] [US2] Create serving/triton/models/qwen3_reranker/config.pbtxt and 1/model.py for reranker
+- [X] T072 [P] [US2] Create serving/triton/models/qwen3_guard/config.pbtxt and 1/model.py for guardrails
+- [X] T073 [US2] Create backend/config/models.yaml for model configuration management (replaces database approach)
+- [X] T074 [P] [US2] Create backend/src/core/model_config.py for loading model config from YAML
+- [X] T075 [P] [US2] Update backend/src/services/brain.py to read generation model from config file
+- [X] T076 [US2] Update backend/src/services/embedding.py to read embedding model from config file
+- [X] T077 [US2] Update backend/src/services/rerank.py to read reranking model from config file
+- [X] T078 [US2] Remove database-based model management (FineTunedModel table, API endpoints, schemas)
 - [ ] T078a [P] [US2] Create guardrails test dataset with sample inappropriate queries in ml/data/guardrails_test.jsonl (e.g., harmful, off-topic, privacy-violating questions)
 - [ ] T078b [US2] Evaluate Qwen3Guard model for false positive rate <2% per SC-008 using ml/scripts/evaluate_guardrails.py
 - [ ] T078c [US2] Integrate guardrails validation into backend/src/core/guardrails.py with logging for filtered queries
