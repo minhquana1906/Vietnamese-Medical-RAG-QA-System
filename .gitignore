@@ -263,3 +263,7 @@ Thumbs.db
 # Chainlit
 .chainlit/
 .files/
+
+data/
+docs/
+note.txt

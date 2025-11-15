@@ -1,0 +1,177 @@
+# LoRA Configuration for Qwen3-4B-Instruct-2507 Fine-tuning
+#
+# This configuration defines hyperparameters for LoRA (Low-Rank Adaptation)
+# fine-tuning of the generation model on Vietnamese medical QA dataset.
+#
+# References:
+# - LoRA paper: https://arxiv.org/abs/2106.09685
+# - QLoRA paper: https://arxiv.org/abs/2305.14314
+# - PEFT library: https://github.com/huggingface/peft
+
+model:
+  base_model: "Qwen/Qwen3-4B-Instruct-2507"
+  model_type: "causal_lm"
+  trust_remote_code: true
+
+# LoRA hyperparameters
+lora:
+  # Rank of the low-rank matrices (r)
+  # Lower rank = fewer parameters, faster training, less expressive
+  # Higher rank = more parameters, slower training, more expressive
+  # Typical values: 8, 16, 32, 64
+  r: 16
+  
+  # Alpha parameter for LoRA scaling (lora_alpha)
+  # Scaling factor: alpha / r
+  # Typical values: 16, 32, 64 (often 2x the rank)
+  lora_alpha: 32
+  
+  # Dropout probability for LoRA layers
+  # Helps prevent overfitting
+  # Typical values: 0.05, 0.1
+  lora_dropout: 0.05
+  
+  # Target modules to apply LoRA
+  # For Qwen3: ["q_proj", "k_proj", "v_proj", "o_proj"] for attention layers
+  # Can also add ["gate_proj", "up_proj", "down_proj"] for MLP layers
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+  
+  # Bias handling
+  # Options: "none", "all", "lora_only"
+  bias: "none"
+  
+  # Task type
+  task_type: "CAUSAL_LM"
+
+# Quantization (QLoRA)
+quantization:
+  # Enable 4-bit quantization for memory efficiency
+  use_qlora: true
+  
+  # Quantization type: "nf4" (normalized float 4) or "fp4" (float point 4)
+  # NF4 is recommended for better performance
+  quant_type: "nf4"
+  
+  # Compute dtype for quantized model
+  # Options: "float16", "bfloat16"
+  compute_dtype: "float16"
+  
+  # Use double quantization (nested quantization)
+  # Saves additional memory with minimal quality loss
+  use_double_quant: true
+
+# Training hyperparameters
+training:
+  # Number of training epochs
+  num_epochs: 3
+  
+  # Batch size per device
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  
+  # Gradient accumulation steps
+  # Effective batch size = batch_size * gradient_accumulation_steps * num_gpus
+  gradient_accumulation_steps: 4
+  
+  # Learning rate
+  # Typical range for LoRA: 1e-4 to 5e-4
+  learning_rate: 2.0e-4
+  
+  # Warmup steps
+  warmup_steps: 100
+  
+  # Weight decay for regularization
+  weight_decay: 0.01
+  
+  # Maximum gradient norm for clipping
+  max_grad_norm: 1.0
+  
+  # Optimizer
+  # Options: "adamw_torch", "paged_adamw_8bit" (for QLoRA)
+  optimizer: "paged_adamw_8bit"
+  
+  # Learning rate scheduler
+  # Options: "linear", "cosine", "constant"
+  lr_scheduler_type: "cosine"
+
+# Data configuration
+data:
+  # Maximum sequence length
+  max_length: 2048
+  
+  # Padding side
+  padding_side: "right"
+  
+  # Truncation
+  truncation: true
+
+# Logging and checkpointing
+logging:
+  # Steps between logging
+  logging_steps: 10
+  
+  # Steps between evaluation
+  eval_steps: 500
+  
+  # Steps between saving checkpoints
+  save_steps: 500
+  
+  # Maximum number of checkpoints to keep
+  save_total_limit: 3
+  
+  # Report to W&B
+  report_to: "wandb"
+
+# Evaluation
+evaluation:
+  # Evaluation strategy: "steps", "epoch", "no"
+  eval_strategy: "steps"
+  
+  # Load best model at end
+  load_best_model_at_end: true
+  
+  # Metric for best model
+  metric_for_best_model: "eval_loss"
+  
+  # Whether higher metric is better
+  greater_is_better: false
+
+# Mixed precision training
+mixed_precision:
+  # Enable FP16 training
+  fp16: true
+  
+  # Enable BF16 training (if supported by hardware)
+  bf16: false
+
+# Recommended inference parameters (from Qwen team)
+inference:
+  # Qwen3-4B-Instruct-2507 supports 262K context natively
+  # For training, 2048 is reasonable; for inference, use up to 16384
+  recommended_max_new_tokens: 16384
+  
+  # Recommended sampling parameters
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  min_p: 0.0
+  
+  # Use presence_penalty (0-2) to reduce repetitions if supported
+  presence_penalty: 0.5
+
+# Notes:
+# 1. For 24GB VRAM: Use QLoRA with r=16, batch_size=4, gradient_accumulation=4
+# 2. For 48GB VRAM: Can increase r to 32 or batch_size to 8
+# 3. For multiple GPUs: Adjust gradient_accumulation_steps accordingly
+# 4. If OOM errors occur:
+#    - Reduce batch_size or max_length
+#    - Enable gradient_checkpointing (at cost of training speed)
+#    - Reduce target_modules (only use attention layers)
+# 5. IMPORTANT: Always use tokenizer.apply_chat_template() for proper formatting
+# 6. Dataset splitting: Most HuggingFace medical datasets don't have test splits
+#    - Manually split: 80/10/10 or 90/10 (train/val/test)
+#    - Use stratified split if dataset has categories
