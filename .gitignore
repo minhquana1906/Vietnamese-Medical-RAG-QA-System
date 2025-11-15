@@ -213,12 +213,6 @@ marimo/_lsp/
 __marimo__/
 
 
-.github/prompts
-.github/copilot-instructions.md
-.specify
-.vscode
-specs/
-
 # Project-specific ignores
 # Models (large binary files)
 models/
@@ -266,4 +260,11 @@ Thumbs.db
 
 data/
 docs/
+
+# .github/prompts
+# .github/copilot-instructions.md
+# .specify
+# .vscode
+# specs/
+
 note.txt
