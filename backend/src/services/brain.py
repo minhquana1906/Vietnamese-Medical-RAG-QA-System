@@ -7,15 +7,19 @@ from loguru import logger
 from openai import OpenAI
 
 from ..configs.setup import get_backend_settings
+from ..core.model_config import (
+    get_generation_model,
+    get_generation_fallback,
+    get_vllm_url,
+)
 
 settings = get_backend_settings()
 
 
 def get_qwen3_client():
+    """Get vLLM client with URL from config."""
     try:
-        vllm_url = settings.vllm_api_base or os.getenv(
-            "VLLM_API_BASE", "http://localhost:8000"
-        )
+        vllm_url = get_vllm_url()
         client = OpenAI(
             api_key="EMPTY", base_url=f"{vllm_url}/v1"  # vLLM doesn't require API key
         )
@@ -27,13 +31,22 @@ def get_qwen3_client():
 
 def qwen3_chat_complete(
     messages: List[Dict[str, str]],
-    model: str = "Qwen3-4B-Instruct-2507",
+    model: Optional[str] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     use_fallback: bool = True,
 ) -> Optional[str]:
+    """
+    Generate chat completion using Qwen3 via vLLM.
+    Dynamically loads deployed model if available.
+    """
     temperature = temperature if temperature is not None else settings.temperature
     max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
+
+    # Get active model from config if not specified
+    if model is None:
+        model = get_generation_model()
+        logger.info(f"Using active generation model from config: {model}")
 
     # Try Qwen3 via vLLM first
     try:
@@ -45,15 +58,16 @@ def qwen3_chat_complete(
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            logger.info("Generated response with Qwen3 via vLLM")
+            logger.info(f"Generated response with model: {model}")
             content: str = response.choices[0].message.content or ""
             return content
     except Exception as e:
-        logger.warning(f"Qwen3 vLLM generation failed: {e}")
+        logger.warning(f"Qwen3 vLLM generation failed with model {model}: {e}")
 
     # Fallback to OpenAI
     if use_fallback:
-        logger.info("Falling back to OpenAI for generation")
+        fallback_model = get_generation_fallback()
+        logger.info(f"Falling back to OpenAI model: {fallback_model}")
         return openai_chat_complete(
             messages, temperature=temperature, max_tokens=max_tokens
         )

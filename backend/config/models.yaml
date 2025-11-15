@@ -1,0 +1,37 @@
+models:
+  # Generation model (served via vLLM)
+  generation:
+    active: "Qwen/Qwen3-4B-Instruct-2507"  # Default base model
+    fallback: "gpt-4o-mini"  # OpenAI fallback
+    description: "Main generation model for medical QA"
+    
+  # Embedding model (served via Triton)
+  embedding:
+    active: "Qwen/Qwen3-Embedding-0.6B"  # Default base model
+    triton_model_name: "qwen3_embedding"  # Model name in Triton
+    fallback: "text-embedding-3-small"  # OpenAI fallback
+    description: "Embedding model for semantic search"
+    
+  # Reranking model (served via Triton)
+  reranking:
+    active: "Qwen/Qwen3-Reranker-0.6B"  # Default base model
+    triton_model_name: "qwen3_reranker"  # Model name in Triton
+    fallback: "rerank-english-v3.0"  # Cohere fallback
+    description: "Reranking model for document scoring"
+    
+  # Guardrails model (served via Triton)
+  guardrails:
+    active: "Qwen/Qwen3Guard-Gen-0.6B"  # Default base model
+    triton_model_name: "qwen3_guard"  # Model name in Triton
+    threshold: 0.5  # Safety threshold
+    description: "Content safety guardrails"
+
+# Model serving endpoints
+serving:
+  vllm_url: "http://localhost:8001"
+  triton_http_url: "http://localhost:8001"
+  triton_grpc_url: "grpc://localhost:8002"
+
+# Notes:
+# - To deploy a fine-tuned model, update the 'active' field with HuggingFace repo ID
+# - Example: active: "hieunguyenminh416/qwen3-medical-v1"

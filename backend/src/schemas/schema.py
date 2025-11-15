@@ -1,4 +1,6 @@
 from typing import Dict, List, Optional
+from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -51,3 +53,6 @@ class SystemHealthResponse(BaseModel):
     api: HealthCheckResponse = Field(..., description="API health status")
     database: HealthCheckResponse = Field(..., description="Database health status")
     cache: HealthCheckResponse = Field(..., description="Cache health status")
+
+
+# Removed Model Management Schemas - now using config/models.yaml instead
