@@ -153,6 +153,10 @@ def generate_conversation_text(conversations):
 
 # rewrite user question based on history and user msg
 def enhance_query_quality(history, message):
+    """
+    Enhance user query quality by rephrasing with conversation context.
+    Uses Qwen3 generation model.
+    """
     try:
         history_messages = generate_conversation_text(history)
         enhanced_prompt = settings.rewrite_prompt.format(
@@ -160,22 +164,30 @@ def enhance_query_quality(history, message):
         )
         logger.info(f"Rewrote user's prompt: {enhanced_prompt}")
 
-        openai_messages = [
+        messages = [
             {
                 "role": "system",
                 "content": "You are an expert in rephrasing user questions.",
             },
             {"role": "user", "content": enhanced_prompt},
         ]
-        logger.info(f"Rephrase input messages: {openai_messages}")
+        logger.info(f"Rephrase input messages: {messages}")
 
-        return openai_chat_complete(openai_messages)
+        # Use Qwen3 for query enhancement
+        enhanced_query = qwen3_chat_complete(messages, use_fallback=True)
+        return (
+            enhanced_query if enhanced_query else message
+        )  # Fallback to original message
     except Exception as e:
         logger.error(f"Error rewriting user question: {e}")
-        raise
+        return message  # Fallback to original on error
 
 
 def detect_route(history, message):
+    """
+    Detect conversation route (medical vs general).
+    Uses Qwen3 generation model.
+    """
     try:
         logger.info(f"Detect route on history messages: {history}")
 
@@ -184,18 +196,21 @@ def detect_route(history, message):
             message=message,
         )
 
-        openai_messages = [
+        messages = [
             {
                 "role": "system",
                 "content": "You are an expert in classifying user intents.",
             },
             {"role": "user", "content": user_prompt},
         ]
-        logger.info(f"Route output: {openai_messages}")
-        return openai_chat_complete(openai_messages)
+        logger.info(f"Route detection messages: {messages}")
+
+        # Use Qwen3 for route detection
+        route = qwen3_chat_complete(messages, use_fallback=True)
+        return route if route else "medical"  # Default to medical route
     except Exception as e:
         logger.error(f"Error detecting route: {e}")
-        raise
+        return "medical"  # Default fallback
 
 
 def get_tavily_agent_answer(messages):
@@ -231,11 +246,16 @@ def get_tavily_agent_answer(messages):
             },
         ]
 
-        # Generate final response with citations
-        final_response = openai_chat_complete(enhanced_messages)
-        logger.info("Generated response with web search citations")
+        # Generate final response with citations using Qwen3
+        final_response = qwen3_chat_complete(enhanced_messages, use_fallback=True)
+
+        if not final_response:
+            logger.error("Failed to generate web search response")
+            return "Xin lỗi, không thể tạo câu trả lời từ kết quả tìm kiếm."
+
+        logger.info("Generated response with web search citations using Qwen3")
 
         return final_response
     except Exception as e:
         logger.error(f"Error in tavily agent answer: {e}")
-        raise
+        return f"Xin lỗi, đã có lỗi xảy ra khi tìm kiếm thông tin: {str(e)}"

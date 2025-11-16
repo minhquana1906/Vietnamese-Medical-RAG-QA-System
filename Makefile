@@ -55,3 +55,38 @@ help: ## Show help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help
+
+
+# Vast ai
+
+.PHONY: vastai-setup vastai-start vastai-stop vastai-logs vastai-health vastai-gpu
+
+# Setup Vast.ai instance (run once)
+vastai-setup:
+	@echo "🚀 Setting up Vast.ai instance..."
+	@bash serving/vastai-setup.sh
+
+# Start model serving services
+vastai-start:
+	@echo "🔥 Starting model serving services..."
+	@cd serving && docker-compose -f docker-compose.yml up -d
+
+# Stop model serving services
+vastai-stop:
+	@echo "🛑 Stopping model serving services..."
+	@cd serving && docker-compose -f docker-compose.yml down
+
+# View logs
+vastai-logs:
+	@echo "📋 Viewing logs..."
+	@cd serving && docker-compose -f docker-compose.yml logs -f
+
+# Health check
+vastai-health:
+	@echo "🏥 Checking health..."
+	@curl -f http://localhost:8001/health && echo "✅ vLLM is healthy"
+	@curl -f http://localhost:8002/v2/health/ready && echo "✅ Triton is healthy"
+
+# Monitor GPU usage
+vastai-gpu:
+	@watch -n 1 nvidia-smi

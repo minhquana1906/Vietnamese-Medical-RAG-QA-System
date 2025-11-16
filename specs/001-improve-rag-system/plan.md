@@ -208,7 +208,7 @@ ml/                                  # NEW: Machine learning workflows
 
 serving/                             # NEW: Model serving configurations
 ├── vllm/
-│   ├── serve_generation.sh
+│   ├── entrypoint.sh
 │   ├── config.json
 │   └── Dockerfile
 ├── triton/

@@ -43,7 +43,7 @@ database/
 ml/                 # Fine-tuning workflows
 serving/
   vllm/
-    serve_generation.sh  # vLLM startup script
+    entrypoint.sh  # vLLM startup script
   triton/
     models/          # Triton model configs (embedding, reranker, guard)
 monitoring/         # Observability stack (Prometheus, Loki, Tempo, Grafana)
@@ -68,7 +68,7 @@ docker-compose up -d
 
 # Model Serving
 cd serving/vllm
-MODEL_NAME=Qwen/Qwen3-4B-Instruct-2507 ./serve_generation.sh
+MODEL_NAME=Qwen/Qwen3-4B-Instruct-2507 ./entrypoint.sh
 
 # Tests
 pytest
