@@ -1,8 +1,3 @@
-"""
-Model Configuration Loader
-Reads model deployment config from config/models.yaml
-"""
-
 from pathlib import Path
 from typing import Optional
 import yaml

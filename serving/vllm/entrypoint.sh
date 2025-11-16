@@ -76,7 +76,7 @@ echo "=========================================="
 # ============================================================================
 
 VLLM_CMD=(
-  python -m vllm.entrypoints.openai.api_server
+  python3 -m vllm.entrypoints.openai.api_server
   --model "$MODEL_PATH"
   --host "$HOST"
   --port "$PORT"
