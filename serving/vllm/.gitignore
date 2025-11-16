@@ -1,0 +1,20 @@
+# Environment variables (contains sensitive data)
+.env
+
+# Model files (too large for git)
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Cache directories
+cache/
+.cache/
+
+# Docker volumes
+volumes/
+
+# Logs
+*.log
+logs/
