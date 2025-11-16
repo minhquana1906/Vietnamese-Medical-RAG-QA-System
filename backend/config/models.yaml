@@ -28,9 +28,9 @@ models:
 
 # Model serving endpoints
 serving:
-  vllm_url: "http://localhost:8001"
-  triton_http_url: "http://localhost:8001"
-  triton_grpc_url: "grpc://localhost:8002"
+  vllm_url: "http://212.93.107.107:8001"
+  triton_http_url: "http://212.93.107.107:8002"
+  triton_grpc_url: "grpc://212.93.107.107:8003"
 
 # Notes:
 # - To deploy a fine-tuned model, update the 'active' field with HuggingFace repo ID

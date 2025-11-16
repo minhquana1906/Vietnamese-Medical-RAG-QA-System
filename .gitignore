@@ -215,11 +215,11 @@ __marimo__/
 
 # Project-specific ignores
 # Models (large binary files)
-models/
-*.pth
-*.bin
-*.safetensors
-*.gguf
+
+models/*.pth
+models/*.bin
+models/*.safetensors
+models/*.gguf
 
 # Data
 data/
