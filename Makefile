@@ -69,17 +69,17 @@ vastai-setup:
 # Start model serving services
 vastai-start:
 	@echo "🔥 Starting model serving services..."
-	@cd serving && docker-compose -f docker-compose.yml up -d
+	@cd serving && docker compose -f docker-compose.yml up -d
 
 # Stop model serving services
 vastai-stop:
 	@echo "🛑 Stopping model serving services..."
-	@cd serving && docker-compose -f docker-compose.yml down
+	@cd serving && docker compose -f docker-compose.yml down
 
 # View logs
 vastai-logs:
 	@echo "📋 Viewing logs..."
-	@cd serving && docker-compose -f docker-compose.yml logs -f
+	@cd serving && docker compose -f docker-compose.yml logs -f
 
 # Health check
 vastai-health:
