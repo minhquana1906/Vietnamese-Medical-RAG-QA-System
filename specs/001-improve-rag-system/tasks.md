@@ -152,7 +152,7 @@
 - [ ] T065 [US2] Run fine-tuning for embedding model on vietnamese-medical-dataset
 - [ ] T066 [US2] Compare fine-tuned vs baseline and verify >= 2% improvement threshold
 - [ ] T067 [US2] Upload fine-tuned models to HuggingFace Hub with detailed model cards
-- [X] T068 [P] [US2] Create serving/vllm/serve_generation.sh script to start vLLM with base generation model
+- [X] T068 [P] [US2] Create serving/vllm/entrypoint.sh script to start vLLM with base generation model
 - [X] T069 [P] [US2] Create serving/triton/models/qwen3_embedding/config.pbtxt for Triton model config
 - [X] T070 [P] [US2] Create serving/triton/models/qwen3_embedding/1/model.py with Python backend for embedding model
 - [X] T071 [P] [US2] Create serving/triton/models/qwen3_reranker/config.pbtxt and 1/model.py for reranker
@@ -163,9 +163,11 @@
 - [X] T076 [US2] Update backend/src/services/embedding.py to read embedding model from config file
 - [X] T077 [US2] Update backend/src/services/rerank.py to read reranking model from config file
 - [X] T078 [US2] Remove database-based model management (FineTunedModel table, API endpoints, schemas)
+- [X] T078d [US2] Update backend/src/tasks.py to use Qwen3 models (embedding, reranking, generation) instead of OpenAI/Cohere
+- [X] T078e [US2] Update RAG pipeline helper functions (enhance_query_quality, detect_route, get_tavily_agent_answer) to use Qwen3
 - [ ] T078a [P] [US2] Create guardrails test dataset with sample inappropriate queries in ml/data/guardrails_test.jsonl (e.g., harmful, off-topic, privacy-violating questions)
 - [ ] T078b [US2] Evaluate Qwen3Guard model for false positive rate <2% per SC-008 using ml/scripts/evaluate_guardrails.py
-- [ ] T078c [US2] Integrate guardrails validation into backend/src/core/guardrails.py with logging for filtered queries
+- [X] T078c [US2] Integrate guardrails validation into backend/src/core/guardrails.py with logging for filtered queries
 
 **Git Example**: `git commit -m "Complete fine-tuning pipeline for generation model with 4.2% improvement over baseline"`
 
