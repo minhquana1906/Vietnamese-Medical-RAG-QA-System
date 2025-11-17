@@ -1,7 +1,7 @@
 services:
   # Generation model (uses ~60% GPU memory)
   vllm:
-    image: vllm/vllm-openai:v0.11.0
+    image: vllm/vllm-openai:v0.8.0
     container_name: vllm_server
     restart: unless-stopped
     ports:
@@ -10,8 +10,8 @@ services:
       - CUDA_VISIBLE_DEVICES=0
       - HF_TOKEN=${HF_TOKEN}
       - MODEL_NAME=${MODEL_NAME:-Qwen/Qwen3-4B-Instruct-2507}
-      - GPU_MEMORY_UTIL=0.6  # Use only 60% GPU memory
-      - MAX_MODEL_LEN=8192   # Reduce context length to save memory
+      - GPU_MEMORY_UTIL=0.6 # Use only 60% GPU memory
+      - MAX_MODEL_LEN=8192 # Reduce context length to save memory
       - TENSOR_PARALLEL_SIZE=1
     volumes:
       - vllm_cache:/root/.cache/huggingface
@@ -39,13 +39,13 @@ services:
     container_name: triton_server
     restart: unless-stopped
     ports:
-      - "8002:8000"   # HTTP
-      - "8003:8001"   # gRPC
-      - "8004:8002"   # Metrics
+      - "8002:8000" # HTTP
+      - "8003:8001" # gRPC
+      - "8004:8002" # Metrics
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - HF_TOKEN=${HF_TOKEN}
-      - CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps  # Enable MPS for GPU sharing
+      - CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps # Enable MPS for GPU sharing
       - CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-log
     volumes:
       - ./triton/models:/models
@@ -71,7 +71,8 @@ services:
     depends_on:
       - vllm
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/v2/health/ready || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:8000/v2/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
