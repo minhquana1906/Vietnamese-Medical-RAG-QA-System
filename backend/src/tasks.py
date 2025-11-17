@@ -1,6 +1,7 @@
 import uuid
 
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from loguru import logger
 
 from .configs.celery_config import get_celery_app
@@ -79,8 +80,13 @@ def bot_route_answer_message(history, question):
         return ai_agent_handle(question)
 
 
-@shared_task
-def rag_qa_task(history, question):
+@shared_task(
+    bind=True,
+    time_limit=300,  # 5 minutes hard timeout
+    soft_time_limit=180,  # 3 minutes soft timeout
+    max_retries=0,  # No automatic retries
+)
+def rag_qa_task(self, history, question):
     """
     RAG QA task with Qwen3Guard input/output validation.
 
@@ -91,6 +97,11 @@ def rag_qa_task(history, question):
     4. Validate response with Qwen3Guard
     5. If invalid, regenerate with feedback (max 2 retries)
     6. Return final validated response
+
+    Args:
+        self: Celery task instance (for cancellation check)
+        history: Conversation history
+        question: User question
     """
     try:
         # ============================================
@@ -201,6 +212,11 @@ def rag_qa_task(history, question):
         final_response = None
 
         while retry_count <= max_retries:
+            # Check if task was revoked (cancelled by user)
+            if self.request.id and self.AsyncResult(self.request.id).state == "REVOKED":
+                logger.warning("❌ Task was cancelled by user, aborting...")
+                return "Yêu cầu đã bị hủy bởi người dùng."
+
             logger.info(f"🔄 Generation attempt {retry_count + 1}/{max_retries + 1}")
 
             if use_web_search:
@@ -308,6 +324,10 @@ def rag_qa_task(history, question):
 
         return final_response
 
+    except SoftTimeLimitExceeded:
+        logger.error("❌ Task exceeded soft time limit (240s), aborting...")
+        return "Xin lỗi, yêu cầu của bạn đã vượt quá thời gian xử lý cho phép. Vui lòng thử lại với câu hỏi ngắn gọn hơn."
+
     except Exception as e:
         logger.error(f"❌ Error in RAG QA task: {e}", exc_info=True)
-        raise
+        return "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."

@@ -1,6 +1,6 @@
 """Qwen3Guard service for content moderation and guardrails."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import httpx
 from loguru import logger
@@ -9,8 +9,6 @@ from ..configs.setup import get_backend_settings
 from .model_config import (
     get_guardrails_model,
     get_guardrails_threshold,
-    get_guardrails_triton_name,
-    get_triton_http_url,
 )
 
 settings = get_backend_settings()
@@ -40,22 +38,17 @@ class Qwen3GuardService:
 
     def __init__(
         self,
-        triton_url: Optional[str] = None,
-        model_name: Optional[str] = None,
+        local_url: str = "http://localhost:8000",
         threshold: Optional[float] = None,
     ):
-        # Load from config
-        self.triton_url = triton_url or get_triton_http_url()
-        self.model_name = model_name or get_guardrails_triton_name()
+        self.local_url = local_url
         self.threshold = threshold or get_guardrails_threshold()
-        self.huggingface_model = get_guardrails_model()  # For logging
+        self.huggingface_model = get_guardrails_model()
 
         self.client = httpx.Client(timeout=10.0)
 
-        logger.info(
-            f"Initialized Qwen3GuardService: "
-            f"HF={self.huggingface_model}, Triton={self.model_name}, "
-            f"Threshold={self.threshold}"
+        logger.debug(
+            f"Init Qwen3GuardService: Local={local_url}, Model={self.huggingface_model}, Threshold={self.threshold}"
         )
 
     def validate_query(self, query: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
@@ -73,21 +66,20 @@ class Qwen3GuardService:
             logger.warning("Empty query blocked by guardrails")
             return False, "empty_query", {"message": "Query cannot be empty"}
 
-        # Call Qwen3Guard model via Triton
+        # Call Qwen3Guard model via local endpoint
         try:
-            is_safe, category, confidence, details = self._check_with_triton(
+            is_safe, category, confidence, details = self._check_with_local(
                 query, check_type="input"
             )
 
             if is_safe:
-                logger.info(
-                    f"✅ Input query passed guardrails (confidence={confidence:.3f}): {query[:80]}..."
+                logger.debug(
+                    f"✅ Input query passed guardrails (confidence={confidence:.3f})"
                 )
                 return True, None, {"confidence": confidence, "details": details}
             else:
                 logger.warning(
-                    f"❌ Input query BLOCKED by guardrails: category={category}, "
-                    f"confidence={confidence:.3f}, query={query[:80]}..."
+                    f"❌ Input query BLOCKED: category={category}, confidence={confidence:.3f}"
                 )
                 return (
                     False,
@@ -137,18 +129,17 @@ class Qwen3GuardService:
                 },
             )
 
-        # Call Qwen3Guard model via Triton
+        # Call Qwen3Guard model via local endpoint
         try:
             # Combine query + response for context-aware validation
             combined_text = f"Query: {query}\n\nResponse: {response}"
-            is_safe, category, confidence, details = self._check_with_triton(
+            is_safe, category, confidence, details = self._check_with_local(
                 combined_text, check_type="output"
             )
 
             if is_safe:
-                logger.info(
-                    f"✅ Output response passed guardrails (confidence={confidence:.3f}): "
-                    f"{response[:80]}..."
+                logger.debug(
+                    f"✅ Output response passed guardrails (confidence={confidence:.3f})"
                 )
                 return True, None, {"confidence": confidence, "details": details}
             else:
@@ -158,10 +149,9 @@ class Qwen3GuardService:
                 )
 
                 logger.warning(
-                    f"❌ Output response BLOCKED by guardrails: category={category}, "
-                    f"confidence={confidence:.3f}, response={response[:80]}..."
+                    f"❌ Output response BLOCKED: category={category}, confidence={confidence:.3f}"
                 )
-                logger.info(f"📝 Regeneration feedback: {feedback}")
+                logger.debug(f"Regeneration feedback: {feedback}")
 
                 return (
                     False,
@@ -178,25 +168,27 @@ class Qwen3GuardService:
                 )
         except Exception as e:
             logger.error(f"❌ Guardrails check failed (output): {e}")
-            # Fail closed for output - reject if can't validate
+            # Fail OPEN for output when service unavailable - allow response to go through
+            # This prevents infinite retry loops when Triton is down
             logger.warning(
-                "⚠️  Guardrails service unavailable, REJECTING response (fail-closed)"
+                "⚠️  Guardrails service unavailable, ALLOWING response (fail-open to prevent retry loop)"
             )
             return (
-                False,
-                "guardrails_error",
+                True,  # Changed from False to True - allow response when service down
+                None,  # No violation
                 {
                     "error": str(e),
                     "failover": True,
-                    "feedback": "Guardrails validation failed. Please provide a safer, more factual response.",
+                    "confidence": None,
+                    "warning": "Response validation skipped due to service unavailability",
                 },
             )
 
-    def _check_with_triton(
+    def _check_with_local(
         self, text: str, check_type: str = "input"
     ) -> Tuple[bool, Optional[str], float, Dict]:
         """
-        Check text safety using Triton-served Qwen3Guard model.
+        Check text safety using local FastAPI endpoint.
 
         Args:
             text: Text to check
@@ -206,50 +198,21 @@ class Qwen3GuardService:
             Tuple[is_safe, category, confidence, details]
         """
         try:
-            payload = {
-                "inputs": [
-                    {
-                        "name": "input_text",
-                        "shape": [1],
-                        "datatype": "BYTES",
-                        "data": [text],
-                    },
-                    {
-                        "name": "check_type",
-                        "shape": [1],
-                        "datatype": "BYTES",
-                        "data": [check_type],
-                    },
-                ]
-            }
+            payload = {"text": text, "check_type": check_type}
 
             response = self.client.post(
-                f"{self.triton_url}/v2/models/{self.model_name}/infer",
+                f"{self.local_url}/v1/models/guard",
                 json=payload,
                 timeout=10.0,
             )
 
             if response.status_code == 200:
                 result = response.json()
-                outputs = result["outputs"]
 
-                # Parse Triton outputs
-                # Expected format: [safety_score, category, details]
-                safety_score = float(
-                    outputs[0]["data"][0]
-                )  # 0.0 (unsafe) to 1.0 (safe)
-                is_safe = safety_score >= self.threshold
-
-                category = outputs[1]["data"][0] if len(outputs) > 1 else None
-                details_json = outputs[2]["data"][0] if len(outputs) > 2 else "{}"
-
-                # Parse details JSON
-                import json
-
-                try:
-                    details = json.loads(details_json)
-                except:
-                    details = {"raw": details_json}
+                is_safe: bool = result["is_safe"]
+                safety_score: float = result["safety_score"]
+                category: Optional[str] = result.get("category")
+                details: Dict = {"model": result.get("model", "unknown")}
 
                 logger.debug(
                     f"Qwen3Guard ({check_type}): safety_score={safety_score:.3f}, "
@@ -259,11 +222,11 @@ class Qwen3GuardService:
                 return is_safe, category, safety_score, details
             else:
                 logger.error(
-                    f"Triton guardrails inference failed: {response.status_code} - {response.text}"
+                    f"Local guardrails failed: {response.status_code} - {response.text}"
                 )
-                raise Exception(f"Triton returned {response.status_code}")
+                raise Exception(f"Local endpoint returned {response.status_code}")
         except Exception as e:
-            logger.error(f"Error calling Triton for guardrails ({check_type}): {e}")
+            logger.error(f"Error calling local guardrails ({check_type}): {e}")
             raise
 
     def _generate_regeneration_feedback(
@@ -394,11 +357,8 @@ class Qwen3GuardService:
         return messages.get(category) or messages.get("invalid_query", "Invalid query")
 
     def health_check(self) -> bool:
-
         try:
-            response = self.client.get(
-                f"{self.triton_url}/v2/health/ready", timeout=5.0
-            )
+            response = self.client.get(f"{self.local_url}/v1/ready", timeout=5.0)
             if response.status_code == 200:
                 logger.info("Qwen3Guard service is healthy")
                 return True

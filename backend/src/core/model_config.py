@@ -4,7 +4,11 @@ import yaml
 from loguru import logger
 
 # Path to models config file
-CONFIG_PATH = Path(__file__).parent.parent / "config" / "models.yaml"
+# In Docker: /app/backend/config/models.yaml
+# In dev: backend/config/models.yaml
+CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "models.yaml"
+
+print(f"Using model config path: {CONFIG_PATH}")
 
 # Cached config (loaded once at startup)
 _config_cache: Optional[dict] = None

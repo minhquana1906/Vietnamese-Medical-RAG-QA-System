@@ -5,8 +5,12 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from .prompt_templates import (INTENT_DETECTION_PROMPT, RAG_PROMPT,
-                               REWRITE_USER_PROMPT, SYSTEM_PROMPT)
+from .prompt_templates import (
+    INTENT_DETECTION_PROMPT,
+    RAG_PROMPT,
+    REWRITE_USER_PROMPT,
+    SYSTEM_PROMPT,
+)
 
 load_dotenv()
 
@@ -46,20 +50,20 @@ class BackendSettings(BaseSettings):
         return f"{self.elasticsearch_scheme}://{self.elasticsearch_host}:{self.elasticsearch_port}"
 
     # vLLM Model Serving (custom generation model: Qwen3-4B-Instruct)
-    vllm_host: str = Field(default=os.getenv("VLLM_HOST", "localhost"))
-    vllm_port: int = Field(default=int(os.getenv("VLLM_PORT", "8000")))
-    vllm_model: str = Field(
-        default=os.getenv("VLLM_MODEL", "Qwen/Qwen3-4B-Instruct-2507")
-    )
+    # vllm_host: str = Field(default=os.getenv("VLLM_HOST", "localhost"))
+    # vllm_port: int = Field(default=int(os.getenv("VLLM_PORT", "8000")))
+    # vllm_model: str = Field(
+    #     default=os.getenv("VLLM_MODEL", "Qwen/Qwen3-4B-Instruct-2507")
+    # )
 
-    @property
-    def vllm_url(self) -> str:
-        return f"http://{self.vllm_host}:{self.vllm_port}"
+    # @property
+    # def vllm_url(self) -> str:
+    #     return f"http://{self.vllm_host}:{self.vllm_port}"
 
     # Triton Inference Server (multi-model serving: embedding, reranker, guardrail)
-    triton_host: str = Field(default=os.getenv("TRITON_HOST", "localhost"))
-    triton_http_port: int = Field(default=int(os.getenv("TRITON_HTTP_PORT", "8001")))
-    triton_grpc_port: int = Field(default=int(os.getenv("TRITON_GRPC_PORT", "8002")))
+    triton_host: str = Field(default=os.getenv("TRITON_HOST", "triton_server"))
+    triton_http_port: int = Field(default=int(os.getenv("TRITON_HTTP_PORT", "8002")))
+    triton_grpc_port: int = Field(default=int(os.getenv("TRITON_GRPC_PORT", "8003")))
 
     @property
     def triton_http_url(self) -> str:
