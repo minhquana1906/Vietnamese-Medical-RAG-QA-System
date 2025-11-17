@@ -1,7 +1,7 @@
 services:
   # Generation model (uses ~60% GPU memory)
   vllm:
-    image: vllm/vllm-openai:v0.8.0
+    image: vllm/vllm-openai:v0.11.0
     container_name: vllm_server
     restart: unless-stopped
     ports:
