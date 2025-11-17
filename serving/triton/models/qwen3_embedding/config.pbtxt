@@ -28,7 +28,5 @@ dynamic_batching {
   max_queue_delay_microseconds: 100000
 }
 
-parameters: {
-  key: "EXECUTION_ENV_PATH"
-  value: {string_value: "$$TRITON_MODEL_DIRECTORY/../../python_env.tar.gz"}
-}
+# Removed EXECUTION_ENV_PATH - use container's default Python environment
+
