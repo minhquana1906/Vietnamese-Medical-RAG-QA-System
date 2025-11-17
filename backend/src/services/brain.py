@@ -16,16 +16,22 @@ from ..core.model_config import (
 settings = get_backend_settings()
 
 
-def get_qwen3_client():
-    """Get vLLM client with URL from config."""
+def get_remote_vllm_client():
+    """
+    Get remote vLLM client from config.
+    Generation model is served on remote server (not local).
+    """
     try:
         vllm_url = get_vllm_url()
         client = OpenAI(
-            api_key="EMPTY", base_url=f"{vllm_url}/v1"  # vLLM doesn't require API key
+            api_key=os.getenv("REMOTE_VLLM_API_KEY"),
+            base_url=f"{vllm_url}/v1",
+            timeout=30.0,
         )
+        logger.debug(f"Initialized remote vLLM client at {vllm_url}")
         return client
     except Exception as e:
-        logger.error(f"Error initializing Qwen3 vLLM client: {e}")
+        logger.error(f"Error initializing remote vLLM client: {e}")
         return None
 
 
@@ -37,8 +43,15 @@ def qwen3_chat_complete(
     use_fallback: bool = True,
 ) -> Optional[str]:
     """
-    Generate chat completion using Qwen3 via vLLM.
-    Dynamically loads deployed model if available.
+    Generate chat completion using remote vLLM server.
+    Generation model is served on external server (config: serving.vllm_url).
+
+    Args:
+        messages: Chat messages in OpenAI format
+        model: Model name (if None, uses config)
+        temperature: Sampling temperature
+        max_tokens: Max tokens to generate
+        use_fallback: Enable OpenAI fallback if remote vLLM fails
     """
     temperature = temperature if temperature is not None else settings.temperature
     max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
@@ -46,11 +59,11 @@ def qwen3_chat_complete(
     # Get active model from config if not specified
     if model is None:
         model = get_generation_model()
-        logger.info(f"Using active generation model from config: {model}")
+        logger.debug(f"Using generation model: {model}")
 
-    # Try Qwen3 via vLLM first
+    # Try remote vLLM server first
     try:
-        client = get_qwen3_client()
+        client = get_remote_vllm_client()
         if client:
             response = client.chat.completions.create(
                 model=model,
@@ -58,16 +71,16 @@ def qwen3_chat_complete(
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            logger.info(f"Generated response with model: {model}")
+            logger.debug(f"✅ Generated with remote vLLM: {model}")
             content: str = response.choices[0].message.content or ""
             return content
     except Exception as e:
-        logger.warning(f"Qwen3 vLLM generation failed with model {model}: {e}")
+        logger.warning(f"❌ Remote vLLM failed ({model}): {e}")
 
     # Fallback to OpenAI
     if use_fallback:
         fallback_model = get_generation_fallback()
-        logger.info(f"Falling back to OpenAI model: {fallback_model}")
+        logger.info(f"🔄 Fallback to OpenAI: {fallback_model}")
         return openai_chat_complete(
             messages, temperature=temperature, max_tokens=max_tokens
         )
@@ -75,16 +88,17 @@ def qwen3_chat_complete(
     return None
 
 
-def check_qwen3_health() -> bool:
+def check_remote_vllm_health() -> bool:
+    """Check health of remote vLLM server."""
     try:
-        vllm_url = settings.vllm_url
+        vllm_url = get_vllm_url()
         response = httpx.get(f"{vllm_url}/health", timeout=5.0)
         if response.status_code == 200:
-            logger.debug("Qwen3 vLLM service is healthy")
+            logger.debug(f"✅ Remote vLLM service is healthy: {vllm_url}")
             return True
         return False
     except Exception as e:
-        logger.warning(f"Qwen3 vLLM health check failed: {e}")
+        logger.warning(f"❌ Remote vLLM health check failed: {e}")
         return False
 
 
@@ -162,7 +176,7 @@ def enhance_query_quality(history, message):
         enhanced_prompt = settings.rewrite_prompt.format(
             history_messages=history_messages, message=message
         )
-        logger.info(f"Rewrote user's prompt: {enhanced_prompt}")
+        logger.debug(f"Enhancing query with context (history length={len(history)})")
 
         messages = [
             {
@@ -171,10 +185,10 @@ def enhance_query_quality(history, message):
             },
             {"role": "user", "content": enhanced_prompt},
         ]
-        logger.info(f"Rephrase input messages: {messages}")
 
         # Use Qwen3 for query enhancement
         enhanced_query = qwen3_chat_complete(messages, use_fallback=True)
+        logger.debug(f"Enhanced query: {enhanced_query[:80]}...")
         return (
             enhanced_query if enhanced_query else message
         )  # Fallback to original message
@@ -189,7 +203,7 @@ def detect_route(history, message):
     Uses Qwen3 generation model.
     """
     try:
-        logger.info(f"Detect route on history messages: {history}")
+        logger.debug(f"Detecting route (history length={len(history)})")
 
         user_prompt = settings.intent_detection_prompt.format(
             history=history,
@@ -203,10 +217,10 @@ def detect_route(history, message):
             },
             {"role": "user", "content": user_prompt},
         ]
-        logger.info(f"Route detection messages: {messages}")
 
         # Use Qwen3 for route detection
         route = qwen3_chat_complete(messages, use_fallback=True)
+        logger.info(f"🎯 Route detected: {route}")
         return route if route else "medical"  # Default to medical route
     except Exception as e:
         logger.error(f"Error detecting route: {e}")
@@ -217,7 +231,7 @@ def get_tavily_agent_answer(messages):
     try:
         from ..functions.web_search import functions_info, tavily_search
 
-        logger.info("Calling tavily tool search for additional information...")
+        logger.info("🔍 Using web search for additional context...")
         client = get_openai_client()
 
         # First, call the function to determine search query
@@ -230,11 +244,11 @@ def get_tavily_agent_answer(messages):
 
         # Extract search arguments
         args = json.loads(response.choices[0].message.function_call.arguments)
-        logger.info(f"Search query args: {args}")
+        logger.debug(f"Search query: {args}")
 
         # Perform web search
         observation = tavily_search(**args)
-        logger.info(f"Web search results obtained with {len(observation)} characters")
+        logger.debug(f"Web search returned {len(observation)} chars")
 
         # Add search results to conversation context
         enhanced_messages = [
@@ -253,7 +267,7 @@ def get_tavily_agent_answer(messages):
             logger.error("Failed to generate web search response")
             return "Xin lỗi, không thể tạo câu trả lời từ kết quả tìm kiếm."
 
-        logger.info("Generated response with web search citations using Qwen3")
+        logger.debug("Generated response with web search citations")
 
         return final_response
     except Exception as e:

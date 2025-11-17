@@ -14,6 +14,7 @@ from prometheus_client import Counter, Histogram, make_asgi_app
 
 from .configs.setup import get_backend_settings
 from .core.vectorize import create_collection
+from .core.model_loader import get_model_registry
 from .database import SessionLocal
 from .helpers import check_cache_health, check_database_health
 from .models import init_db, insert_document
@@ -115,6 +116,15 @@ def on_startup():
     try:
         init_db()
         create_collection()
+
+        # Load models for local inference
+        try:
+            model_registry = get_model_registry()
+            model_registry.load_models()
+            logger.info("✅ Models loaded successfully")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to load models (will use fallbacks): {e}")
+
         logger.info("Application startup complete.")
     except Exception as e:
         logger.error(f"Error during startup: {e}")
@@ -244,3 +254,140 @@ def insert_document_endpoint(title: str, content: str):
             span.set_attribute("error", True)
             span.set_attribute("error.message", str(e))
             raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+# ============= Model Inference Endpoints =============
+
+from pydantic import BaseModel
+from typing import List, Dict, Any
+
+
+class EmbedRequest(BaseModel):
+    texts: List[str]
+    normalize: bool = True
+
+
+class EmbedResponse(BaseModel):
+    embeddings: List[List[float]]
+    model: str
+
+
+class RerankRequest(BaseModel):
+    query: str
+    documents: List[str]
+    top_n: int = 5
+
+
+class RerankResponse(BaseModel):
+    scores: List[float]
+    indices: List[int]
+    model: str
+
+
+class GuardRequest(BaseModel):
+    text: str
+    check_type: str = "input"
+
+
+class GuardResponse(BaseModel):
+    is_safe: bool
+    safety_score: float
+    category: Optional[str] = None
+    model: str
+
+
+@app.post("/v1/models/embed", response_model=EmbedResponse)
+async def embed_endpoint(request: EmbedRequest):
+    """Generate embeddings for texts"""
+    try:
+        model_registry = get_model_registry()
+
+        if not model_registry.is_ready():
+            raise HTTPException(status_code=503, detail="Models not loaded")
+
+        start_time = time.time()
+        embeddings = model_registry.embed_texts(request.texts, request.normalize)
+        duration = time.time() - start_time
+
+        model_inference_duration_seconds.labels(
+            model_type="embedding", model_name="qwen3"
+        ).observe(duration)
+
+        logger.debug(f"Embedded {len(embeddings)} texts in {duration:.3f}s")
+
+        from .core.model_config import get_embedding_model
+
+        return EmbedResponse(embeddings=embeddings, model=get_embedding_model())
+
+    except Exception as e:
+        logger.error(f"Embedding error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v1/models/rerank", response_model=RerankResponse)
+async def rerank_endpoint(request: RerankRequest):
+    """Rerank documents by relevance"""
+    try:
+        model_registry = get_model_registry()
+
+        if not model_registry.is_ready():
+            raise HTTPException(status_code=503, detail="Models not loaded")
+
+        start_time = time.time()
+        scores, indices = model_registry.rerank_documents(
+            request.query, request.documents, request.top_n
+        )
+        duration = time.time() - start_time
+
+        model_inference_duration_seconds.labels(
+            model_type="reranking", model_name="qwen3"
+        ).observe(duration)
+
+        logger.debug(f"Reranked {len(request.documents)} docs in {duration:.3f}s")
+
+        from .core.model_config import get_reranking_model
+
+        return RerankResponse(
+            scores=scores, indices=indices, model=get_reranking_model()
+        )
+
+    except Exception as e:
+        logger.error(f"Reranking error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v1/models/guard", response_model=GuardResponse)
+async def guard_endpoint(request: GuardRequest):
+    """Check content safety"""
+    try:
+        model_registry = get_model_registry()
+
+        if not model_registry.is_ready():
+            raise HTTPException(status_code=503, detail="Models not loaded")
+
+        start_time = time.time()
+        is_safe, safety_score, category = model_registry.check_safety(
+            request.text, request.check_type
+        )
+        duration = time.time() - start_time
+
+        model_inference_duration_seconds.labels(
+            model_type="guardrails", model_name="qwen3"
+        ).observe(duration)
+
+        logger.debug(
+            f"Guard check in {duration:.3f}s: is_safe={is_safe}, score={safety_score:.3f}"
+        )
+
+        from .core.model_config import get_guardrails_model
+
+        return GuardResponse(
+            is_safe=is_safe,
+            safety_score=safety_score,
+            category=category,
+            model=get_guardrails_model(),
+        )
+
+    except Exception as e:
+        logger.error(f"Guardrails error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

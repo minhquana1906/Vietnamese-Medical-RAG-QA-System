@@ -45,9 +45,9 @@ models:
     description: "Content safety guardrails"
 
 serving:
-  vllm_url: "http://localhost:8001"
-  triton_http_url: "http://localhost:8001"
-  triton_grpc_url: "grpc://localhost:8002"
+  # vllm_url: "http://localhost:8001"
+  # triton_http_url: "http://localhost:8001"
+  # triton_grpc_url: "grpc://localhost:8002"
 ```
 
 ---

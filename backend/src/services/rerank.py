@@ -8,9 +8,7 @@ from loguru import logger
 from ..configs.setup import get_backend_settings
 from ..core.model_config import (
     get_reranking_model,
-    get_reranking_triton_name,
     get_reranking_fallback,
-    get_triton_http_url,
 )
 
 settings = get_backend_settings()
@@ -20,26 +18,21 @@ class Qwen3RerankerService:
 
     def __init__(
         self,
-        triton_url: Optional[str] = None,
-        model_name: Optional[str] = None,
+        local_url: str = "http://localhost:8000",
         cohere_fallback: bool = True,
     ):
         """
-        Initialize Qwen3 Reranker Service with Triton backend.
+        Initialize Qwen3 Reranker Service with local FastAPI backend.
 
         Args:
-            triton_url: Triton server URL (if None, uses config)
-            model_name: Triton model name (if None, uses config)
-            cohere_fallback: Enable Cohere fallback if Triton fails
+            local_url: Local backend URL
+            cohere_fallback: Enable Cohere fallback if local fails
         """
-        # Get config values
-        self.triton_url = triton_url or get_triton_http_url()
-        self.model_name = model_name or get_reranking_triton_name()
-        self.huggingface_model = get_reranking_model()  # For logging
+        self.local_url = local_url
+        self.huggingface_model = get_reranking_model()
 
-        logger.info(
-            f"Initialized Qwen3RerankerService: "
-            f"HF={self.huggingface_model}, Triton={self.model_name}"
+        logger.debug(
+            f"Init Qwen3RerankerService: Local={local_url}, Model={self.huggingface_model}"
         )
 
         self.cohere_fallback = cohere_fallback
@@ -48,20 +41,20 @@ class Qwen3RerankerService:
     def rerank(
         self, query: str, documents: List[Dict[str, Any]], top_n: int = 5
     ) -> Tuple[List[Dict[str, Any]], str]:
-        # Try Qwen3-Reranker via Triton first
+        # Try local reranker first
         try:
-            reranked_results = self._rerank_with_triton(query, documents, top_n)
+            reranked_results = self._rerank_with_local(query, documents, top_n)
             rerank_context = self._format_rerank_context(documents, reranked_results)
-            logger.info(
-                f"Reranked {len(reranked_results)} documents with Qwen3-Reranker"
+            logger.debug(
+                f"Reranked {len(reranked_results)} documents with local Qwen3-Reranker"
             )
             return reranked_results, rerank_context
         except Exception as e:
-            logger.warning(f"Qwen3-Reranker failed: {e}")
+            logger.warning(f"Local Qwen3-Reranker failed: {e}")
 
         # Fallback to Cohere
         if self.cohere_fallback:
-            logger.info("Falling back to Cohere reranking")
+            logger.info("🔄 Fallback to Cohere reranking")
             return cohere_rerank(query, documents, top_n=top_n)
 
         # If no fallback, return original documents
@@ -75,57 +68,40 @@ class Qwen3RerankerService:
         )
         return documents[:top_n], rerank_context
 
-    def _rerank_with_triton(
+    def _rerank_with_local(
         self, query: str, documents: List[Dict[str, Any]], top_n: int
     ) -> List[Dict[str, Any]]:
+        """Call local FastAPI endpoint"""
         # Prepare document texts
         doc_texts = [
             f"Title: {doc.get('title', '')}\nContent: {doc.get('content', '')}"
             for doc in documents
         ]
 
-        # Triton inference request
-        payload = {
-            "inputs": [
-                {
-                    "name": "query",
-                    "shape": [1],
-                    "datatype": "BYTES",
-                    "data": [query],
-                },
-                {
-                    "name": "documents",
-                    "shape": [len(doc_texts)],
-                    "datatype": "BYTES",
-                    "data": doc_texts,
-                },
-            ]
-        }
+        # Local API request
+        payload = {"query": query, "documents": doc_texts, "top_n": top_n}
 
         response = self.client.post(
-            f"{self.triton_url}/v2/models/{self.model_name}/infer",
+            f"{self.local_url}/v1/models/rerank",
             json=payload,
         )
 
         if response.status_code != 200:
             raise Exception(
-                f"Triton reranking failed: {response.status_code} - {response.text}"
+                f"Local reranking failed: {response.status_code} - {response.text}"
             )
 
         result = response.json()
-        # Assuming output format: {"scores": [float, ...]}
-        scores = result["outputs"][0]["data"]
+        scores = result["scores"]
+        indices = result["indices"]
 
         # Create reranked results
         scored_docs = [
-            {"index": i, "relevance_score": scores[i]} for i in range(len(documents))
+            {"index": indices[i], "relevance_score": scores[i]}
+            for i in range(len(indices))
         ]
 
-        # Sort by score descending
-        scored_docs.sort(key=lambda x: x["relevance_score"], reverse=True)
-
-        # Return top-n
-        return scored_docs[:top_n]
+        return scored_docs
 
     def _format_rerank_context(
         self, documents: List[Dict[str, Any]], reranked_results: List[Dict[str, Any]]

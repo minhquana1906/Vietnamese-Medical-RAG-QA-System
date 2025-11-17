@@ -64,6 +64,9 @@ backend = [
     "types-pyyaml>=6.0.12.20250915",
     "uvicorn>=0.25.0",
     "pydantic[email]>=2.11.9",
+    "torch>=2.2.0",
+    "transformers>=4.57.0",
+    "sentence-transformers>=4.0.0",
 ]
 frontend = [
     "requests==2.32.3",
@@ -97,6 +100,7 @@ ml = [
     "torch>=2.0.0",
     "tqdm>=4.66.0",
     "transformers>=4.36.0",
+    "vastai>=0.2.8",
     "wandb>=0.16.0",
 ]
 

@@ -36,7 +36,7 @@ class TritonPythonModel:
 
         self.model = AutoModel.from_pretrained(
             self.model_name,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             trust_remote_code=True,
         ).to(self.device)
 
@@ -59,11 +59,15 @@ class TritonPythonModel:
         for request in requests:
             # Get input text
             input_tensor = pb_utils.get_input_tensor_by_name(request, "INPUT_TEXT")
-            texts = input_tensor.as_numpy().tolist()
+            texts_raw = input_tensor.as_numpy()
 
-            # Decode bytes to strings if necessary
-            if isinstance(texts[0], bytes):
-                texts = [t.decode("utf-8") for t in texts]
+            # Flatten and decode bytes to strings
+            texts = []
+            for item in texts_raw.flatten():
+                if isinstance(item, bytes):
+                    texts.append(item.decode("utf-8"))
+                else:
+                    texts.append(str(item))
 
             try:
                 # Tokenize

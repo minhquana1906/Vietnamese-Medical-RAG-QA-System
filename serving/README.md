@@ -1,102 +1,42 @@
-# Installing the NVIDIA Container Toolkit
-## Installation
-### Prerequisites
-1. Read this section about platform support.
+# Model Serving Infrastructure
 
-2. Install the NVIDIA GPU driver for your Linux distribution. NVIDIA recommends installing the driver by using the package manager for your distribution. For information about installing the driver with a package manager, refer to the NVIDIA Driver Installation Quickstart Guide. Alternatively, you can install the driver by downloading a .run installer.
+See detailed guide: [TRITON_LOCAL_SETUP.md](../docs/TRITON_LOCAL_SETUP.md)
 
->Note
->There is a known issue on systems where systemd cgroup drivers are used that cause containers to lose access to requested GPUs when systemctl daemon reload is run. Refer to the troubleshooting documentation for more information.
-
-### With apt: Ubuntu, Debian
-
->Note
->These instructions should work for any Debian-derived distribution.
-
-1. Install the prerequisites for the instructions below:
+## Quick Start
 
 ```bash
-sudo apt-get update && sudo apt-get install -y --no-install-recommends \
-curl \
-gnupg2
+# Set HuggingFace token
+export HF_TOKEN="your_token"
+
+# Start Triton
+docker-compose up -d triton
+
+# Verify health
+curl http://localhost:8002/v2/health/ready
+curl http://localhost:8002/v2/models | jq
 ```
 
-2. Configure the production repository:
-```bash
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-```
+## Architecture
 
-Optionally, configure the repository to use experimental packages:
+- **Generation Model**: Remote vLLM server (http://112.84.166.37:20362)
+- **Triton Models** (Local GPU):
+  - qwen3_embedding: Semantic search embeddings
+  - qwen3_reranker: Document reranking
+  - qwen3_guard: Content safety guardrails
 
-```bash
-sudo sed -i -e '/experimental/ s/^#//g' /etc/apt/sources.list.d/nvidia-container-toolkit.list
-```
+## Ports
 
-3. Update the packages list from the repository:
-
-```bash
-sudo apt-get update
-```
-
-4. Install the NVIDIA Container Toolkit packages:
-```bash
-export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.18.0-1
-sudo apt-get install -y \
-    nvidia-container-toolkit=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
-    nvidia-container-toolkit-base=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
-    libnvidia-container-tools=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
-    libnvidia-container1=${NVIDIA_CONTAINER_TOOLKIT_VERSION}
-```
+- 8002: Triton HTTP
+- 8003: Triton gRPC  
+- 8004: Triton Metrics
 
 ## Configuration
-### Prerequisites
-- You installed a supported container engine (Docker, Containerd, CRI-O, Podman).
-- You installed the NVIDIA Container Toolkit.
 
-### Configuring Docker
-1. Configure the container runtime by using the nvidia-ctk command:
-```bash
-sudo nvidia-ctk runtime configure --runtime=docker
+Backend config: `backend/config/models.yaml`
+
+```yaml
+serving:
+  vllm_url: "http://112.84.166.37:20362"
+  triton_http_url: "http://localhost:8002"
+  triton_grpc_url: "grpc://localhost:8003"
 ```
-The nvidia-ctk command modifies the /etc/docker/daemon.json file on the host. The file is updated so that Docker can use the NVIDIA Container Runtime.
-
-2. Restart the Docker daemon:
-```bash
-sudo systemctl restart docker
-```
-
-### Rootless mode
-To configure the container runtime for Docker running in Rootless mode, follow these steps:
-
-1. Configure the container runtime by using the nvidia-ctk command:
-
-```bash
-nvidia-ctk runtime configure --runtime=docker --config=$HOME/.config/docker/daemon.json
-```
-
-2. Restart the Rootless Docker daemon:
-
-```bash
-systemctl --user restart docker
-```
-
-3. Configure /etc/nvidia-container-runtime/config.toml by using the sudo nvidia-ctk command:
-
-```bash
-sudo nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place
-```
-
-## Test
-```bash
-docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
-```
-
-or
-```bash
-sudo docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
-```
-
-

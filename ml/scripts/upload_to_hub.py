@@ -132,7 +132,7 @@ from peft import PeftModel
 # Load base model
 base_model = AutoModelForCausalLM.from_pretrained(
     "{base_model}",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     trust_remote_code=True
 )
