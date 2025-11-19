@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-improve-rag-system`
 **Created**: 2025-10-31
-**Updated**: 2025-11-01 (Schema Simplification)
+**Updated**: 2025-11-19 (Serving Architecture Refactoring + RAG Evaluation)
 **Input**: Design documents from `/specs/001-improve-rag-system/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
@@ -10,14 +10,18 @@
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
-> **📝 Schema Update (2025-11-01)**: 
-> - ✅ Database simplified to Chainlit standard schema + simple documents/chunks
-> - ✅ OAuth only (no password/JWT tasks needed)
+> **� Architecture Update (2025-11-19)**:
+> - ✅ **Serving Refactored**: Triton replaced with FastAPI for embedding/reranking/guardrails
+> - ✅ **Model Serving**: Remote vLLM for generation, Local FastAPI for embedding/reranking/guardrails
+> - ✅ **Fine-tuning Removed**: Tasks T049-T078 removed (out of current scope)
+> - ✅ **Triton Removed**: Tasks T005, T009, T069-T072 removed (replaced by FastAPI)
+> - 🆕 **RAG Evaluation Added**: New Phase 4 with comprehensive metrics (Recall@K, nDCG@K, MRR, Faithfulness, Answer Relevance, Correctness, Latency)
+> - 🆕 **Evaluation Tools**: DeepEval + LlamaIndex for automated RAG assessment
+
+> **📝 Previous Updates**: 
+> - ✅ Schema Simplification (2025-11-01): Chainlit standard schema + OAuth only
 > - ✅ Phase 2 (Foundational) completed: T015-T030d (database schema, migration, legacy cleanup)
-> - ✅ Phase 3 (User Story 1) updated: T031-T048 now reflect OAuth-only Chainlit authentication
-> - **Removed**: Old password/JWT tasks (POST /auth/register, POST /auth/login, JWT token generation)
-> - **Added**: OAuth configuration tasks, Chainlit data layer integration, thread management
-> - See [SCHEMA_SIMPLIFICATION.md](./SCHEMA_SIMPLIFICATION.md) for details
+> - ✅ Phase 3 (User Story 1) completed: T031-T048 (Chainlit UI with OAuth)
 
 ## Format: `- [ ] [ID] [P?] [Story?] Description`
 
@@ -31,20 +35,19 @@
 
 **Purpose**: Project initialization and new infrastructure setup
 
-- [X] T001 Create new directory structure per plan.md (ml/, serving/, monitoring/, testing/, frontend/components/)
+- [X] T001 Create new directory structure per plan.md (serving/, monitoring/, testing/, frontend/components/)
 - [X] T002 [P] Update backend/docker-compose.yml to include Elasticsearch 8.11.0 service
 - [X] T003 [P] Create monitoring/docker-compose.yml for Prometheus, Loki, Tempo, Promtail, Grafana
-- [X] T004 [P] Create serving/vllm/docker-compose.yml for vLLM generation model serving
-- [X] T005 [P] Create serving/triton/docker-compose.yml for Triton inference server
-- [X] T006 [P] Create .env.example with all required environment variables (HF_TOKEN, WANDB_API_KEY, JWT_SECRET, etc.)
+- [X] T004 [P] Create serving/vllm/docker-compose.yml for remote vLLM generation model serving
+- [X] T006 [P] Create .env.example with all required environment variables (HF_TOKEN, WANDB_API_KEY, etc.)
 - [X] T007 [P] Update backend/requirements.txt with new dependencies (chainlit, elasticsearch, prometheus-client, opentelemetry-api)
-- [X] T008 [P] Create ml/requirements.txt with fine-tuning dependencies (peft, bitsandbytes, wandb, datasets)
-- [X] T009 [P] Create serving/triton/models directory structure for qwen3_embedding, qwen3_reranker, qwen3_guard
 - [X] T010 [P] Create monitoring/grafana/dashboards/ directory with placeholder files
 - [X] T011 [P] Create monitoring/prometheus.yml configuration
 - [X] T012 [P] Create monitoring/loki/loki-config.yaml configuration
 - [X] T013 [P] Create monitoring/tempo/tempo-config.yaml configuration
 - [X] T014 [P] Create testing/locustfile.py skeleton for load testing
+
+**Note**: Tasks T005 (Triton), T008 (ml/requirements.txt), T009 (Triton models) removed - replaced by FastAPI serving
 
 **Git Example**: `git commit -m "Add infrastructure configuration for monitoring and model serving"`
 
@@ -125,53 +128,35 @@
 
 ---
 
-## Phase 4: User Story 2 - Enhanced Model Performance through Fine-tuning (Priority: P2)
+## Phase 4: Model Serving Configuration (Priority: P2)
 
-**Goal**: System uses fine-tuned Qwen3 models specifically trained on Vietnamese medical datasets for improved accuracy
+**Goal**: Configure and verify model serving infrastructure with FastAPI backend and remote vLLM
 
-**Independent Test**: Compare responses from baseline vs fine-tuned models on held-out medical QA dataset and verify measurable improvement in metrics
+**Independent Test**: Verify all models (embedding, reranking, guardrails via FastAPI; generation via remote vLLM) are accessible and working correctly
 
-### Implementation for User Story 2
+**Context**: Fine-tuning tasks removed from scope. Focus on configuring existing models for optimal serving.
 
-- [X] T049 [P] [US2] Create backend/scripts/load_dataset.py to download combined_medical_qa_dataset and vietnamese-medical-dataset from HuggingFace
-- [X] T050 [P] [US2] Create ml/notebooks/01_generation_baseline.ipynb for Qwen3-4B-Instruct-2507 baseline evaluation
-- [X] T051 [P] [US2] Create ml/notebooks/02_generation_finetune.ipynb for LoRA fine-tuning experiments
-- [X] T052 [P] [US2] Create ml/notebooks/03_embedding_baseline.ipynb for Qwen3-Embedding-0.6B baseline evaluation
-- [X] T053 [P] [US2] Create ml/notebooks/04_embedding_finetune.ipynb for embedding fine-tuning experiments
-- [X] T054 [P] [US2] Create ml/notebooks/05_evaluation.ipynb for comparing baseline vs fine-tuned metrics
-- [X] T055 [US2] Create ml/scripts/train_generation.py with LoRA/QLoRA fine-tuning for generation model using peft and bitsandbytes
-- [X] T056 [P] [US2] Create ml/scripts/train_embedding.py with fine-tuning for embedding model on contrastive learning
-- [X] T057 [P] [US2] Create ml/scripts/evaluate_generation.py with BLEU, ROUGE-L, BERTScore evaluation
-- [X] T058 [P] [US2] Create ml/scripts/evaluate_embedding.py with retrieval metrics (Precision@K, Recall@K, MRR)
-- [X] T059 [P] [US2] Create ml/scripts/upload_to_hub.py for uploading fine-tuned models to HuggingFace Hub with model cards
-- [X] T060 [P] [US2] Create ml/configs/generation_lora_config.yaml with LoRA hyperparameters (r=16, alpha=32, target_modules)
-- [X] T061 [P] [US2] Create ml/configs/embedding_lora_config.yaml with embedding fine-tuning config
-- [ ] T062 [US2] Run baseline evaluation for generation model and log metrics to W&B
-- [ ] T063 [US2] Run fine-tuning for generation model with LoRA on combined_medical_qa_dataset
-- [ ] T064 [US2] Run baseline evaluation for embedding model and log metrics to W&B
-- [ ] T065 [US2] Run fine-tuning for embedding model on vietnamese-medical-dataset
-- [ ] T066 [US2] Compare fine-tuned vs baseline and verify >= 2% improvement threshold
-- [ ] T067 [US2] Upload fine-tuned models to HuggingFace Hub with detailed model cards
-- [X] T068 [P] [US2] Create serving/vllm/entrypoint.sh script to start vLLM with base generation model
-- [X] T069 [P] [US2] Create serving/triton/models/qwen3_embedding/config.pbtxt for Triton model config
-- [X] T070 [P] [US2] Create serving/triton/models/qwen3_embedding/1/model.py with Python backend for embedding model
-- [X] T071 [P] [US2] Create serving/triton/models/qwen3_reranker/config.pbtxt and 1/model.py for reranker
-- [X] T072 [P] [US2] Create serving/triton/models/qwen3_guard/config.pbtxt and 1/model.py for guardrails
-- [X] T073 [US2] Create backend/config/models.yaml for model configuration management (replaces database approach)
+### Implementation for Model Serving
+
+- [X] T068 [P] [US2] Create serving/vllm/entrypoint.sh script to start remote vLLM with generation model
+- [X] T073 [US2] Create backend/config/models.yaml for model configuration management
 - [X] T074 [P] [US2] Create backend/src/core/model_config.py for loading model config from YAML
-- [X] T075 [P] [US2] Update backend/src/services/brain.py to read generation model from config file
-- [X] T076 [US2] Update backend/src/services/embedding.py to read embedding model from config file
-- [X] T077 [US2] Update backend/src/services/rerank.py to read reranking model from config file
+- [X] T075 [P] [US2] Update backend/src/services/brain.py to read generation model from config file and use remote vLLM
+- [X] T076 [US2] Update backend/src/services/embedding.py to use FastAPI backend for embedding service
+- [X] T077 [US2] Update backend/src/services/rerank.py to use FastAPI backend for reranking service
 - [X] T078 [US2] Remove database-based model management (FineTunedModel table, API endpoints, schemas)
-- [X] T078d [US2] Update backend/src/tasks.py to use Qwen3 models (embedding, reranking, generation) instead of OpenAI/Cohere
-- [X] T078e [US2] Update RAG pipeline helper functions (enhance_query_quality, detect_route, get_tavily_agent_answer) to use Qwen3
-- [ ] T078a [P] [US2] Create guardrails test dataset with sample inappropriate queries in ml/data/guardrails_test.jsonl (e.g., harmful, off-topic, privacy-violating questions)
-- [ ] T078b [US2] Evaluate Qwen3Guard model for false positive rate <2% per SC-008 using ml/scripts/evaluate_guardrails.py
 - [X] T078c [US2] Integrate guardrails validation into backend/src/core/guardrails.py with logging for filtered queries
+- [X] T078d [US2] Update backend/src/tasks.py to use Qwen3 models (embedding, reranking, generation) with proper error handling
+- [X] T078e [US2] Update RAG pipeline helper functions (enhance_query_quality, detect_route, get_tavily_agent_answer) to use Qwen3
+- [ ] T078f [P] [US2] Create health check script in backend/scripts/verify_serving.py to test all model endpoints (embedding, reranking, guardrails, generation)
+- [ ] T078g [US2] Run verification script and ensure <2s latency for embedding/reranking, <5s for generation
+- [ ] T078h [P] [US2] Document serving architecture in docs/SERVING_ARCHITECTURE.md with deployment instructions
 
-**Git Example**: `git commit -m "Complete fine-tuning pipeline for generation model with 4.2% improvement over baseline"`
+**Note**: Fine-tuning tasks (T049-T067, T069-T072) removed - replaced by pre-trained model serving via FastAPI
 
-**Checkpoint**: At this point, fine-tuned models are trained, evaluated, and serving via vLLM/Triton with guardrails validation
+**Git Example**: `git commit -m "Configure model serving with FastAPI backend and remote vLLM"`
+
+**Checkpoint**: At this point, all models are properly configured and serving via FastAPI/vLLM
 
 ---
 
@@ -183,16 +168,16 @@
 
 ### Implementation for User Story 3
 
-- [ ] T079 [P] [US3] Implement BM25 keyword search in backend/src/services/elasticsearch.py with Vietnamese text analyzer
-- [ ] T080 [P] [US3] Implement vector search wrapper in backend/src/core/vectorize.py for Qdrant similarity search
-- [ ] T081 [US3] Implement Reciprocal Rank Fusion in backend/src/core/hybrid_search.py with configurable k parameter (default k=60)
-- [ ] T082 [US3] Create hybrid_search function that combines vector and keyword results in backend/src/core/hybrid_search.py
-- [ ] T083 [US3] Update backend/src/tasks.py message_handler_task to use hybrid search instead of vector-only search
-- [ ] T084 [P] [US3] Add search type metrics to Prometheus instrumentation (rag_search_requests_total{search_type="vector|keyword|hybrid"})
-- [ ] T085 [P] [US3] Update caching layer in backend/src/core/cache.py to cache hybrid search results with key prefix "search:hybrid:"
-- [ ] T086 [US3] Configure Elasticsearch index mapping in database/init.sql with Vietnamese analyzer settings
-- [ ] T087 [US3] Update document chunking in backend/src/services/chunking.py to implement **single fixed semantic strategy** across all document types with sentence boundary awareness (512 token limit, 50 token overlap)
-- [ ] T088 [US3] Update chunk indexing to write to both Qdrant and Elasticsearch in backend/src/tasks.py
+- [X] T079 [P] [US3] Implement BM25 keyword search in backend/src/services/elasticsearch.py with Vietnamese text analyzer
+- [X] T080 [P] [US3] Implement vector search wrapper in backend/src/core/vectorize.py for Qdrant similarity search
+- [X] T081 [US3] Implement Reciprocal Rank Fusion in backend/src/core/hybrid_search.py with configurable k parameter (default k=60)
+- [X] T082 [US3] Create hybrid_search function that combines vector and keyword results in backend/src/core/hybrid_search.py
+- [X] T083 [US3] Update backend/src/tasks.py message_handler_task to use hybrid search instead of vector-only search
+- [X] T084 [P] [US3] Add search type metrics to Prometheus instrumentation (rag_search_requests_total{search_type="vector|keyword|hybrid"})
+- [X] T085 [P] [US3] Update caching layer in backend/src/core/cache.py to cache hybrid search results with key prefix "search:hybrid:"
+- [X] T086 [US3] Configure Elasticsearch index mapping in database/init.sql with Vietnamese analyzer settings
+- [X] T087 [US3] Update document chunking in backend/src/services/chunking.py to implement **single fixed semantic strategy** across all document types with sentence boundary awareness (512 token limit, 50 token overlap)
+- [X] T088 [US3] Update chunk indexing to write to both Qdrant and Elasticsearch in backend/src/tasks.py
 
 **Git Example**: `git commit -m "Implement hybrid search with RRF fusion showing 18% improvement in precision@10"`
 
@@ -221,8 +206,8 @@
 - [ ] T097 [US4] Update Qdrant insertion in backend/src/core/vectorize.py to include enhanced metadata in payload
 - [ ] T098 [US4] Update Elasticsearch indexing in backend/src/services/elasticsearch.py with full metadata fields
 - [ ] T099 [US4] Implement progress tracking in chunk_and_index_document task using Celery task.update_state
-- [ ] T100 [US4] Run backend/scripts/load_dataset.py to download combined_medical_dataset from HuggingFace
-- [ ] T101 [US4] Execute POST /indexing/ingest-dataset to index combined_medical_dataset into Qdrant and Elasticsearch
+- [ ] T100 [US4] Run backend/scripts/load_dataset.py to download quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace (https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset)
+- [ ] T101 [US4] Execute POST /indexing/ingest-dataset to index vietnamese_medical_corpus_dataset into Qdrant and Elasticsearch
 - [ ] T102 [US4] Verify all documents indexed successfully with metadata completeness check
 - [ ] T102a [P] [US4] Implement incremental dataset update logic in backend/src/tasks.py to handle document updates without full reindex (check document hash, update only changed documents)
 - [ ] T102b [P] [US4] Add dataset version tracking in backend/src/models.py to support incremental updates per FR-026
@@ -267,7 +252,7 @@
 
 - [ ] T111 [P] [US6] Create monitoring/prometheus/alerts.yml with alerting rules for high error rates, high latency
 - [ ] T112 [P] [US6] Create monitoring/grafana/dashboards/rag_pipeline.json with RAG-specific metrics visualization
-- [ ] T113 [P] [US6] Create monitoring/grafana/dashboards/model_serving.json with vLLM and Triton metrics
+- [ ] T113 [P] [US6] Create monitoring/grafana/dashboards/model_serving.json with vLLM and FastAPI metrics
 - [ ] T114 [P] [US6] Create monitoring/grafana/dashboards/system_health.json with CPU, memory, GPU utilization
 - [ ] T115 [P] [US6] Create monitoring/grafana/datasources.yaml to connect Prometheus, Loki, and Tempo
 - [ ] T116 [US6] Add structured logging to all RAG pipeline stages in backend/src/tasks.py (embedding, retrieval, reranking, generation)
@@ -332,14 +317,87 @@
 - [ ] T148 [P] Create .dockerignore files to optimize Docker build context
 - [ ] T148a [P] Add environment variable validation in backend/src/configs/setup.py to ensure all required vars are set at startup
 - [ ] T149 Performance optimization: tune vLLM gpu-memory-utilization and max-model-len parameters
-- [ ] T150 Performance optimization: tune Triton batching parameters for embedding/reranking models
-- [ ] T151 [P] Add error handling for model serving failures with graceful fallback to OpenAI/Cohere
-- [ ] T152 [P] Add database connection pooling optimization in backend/src/database.py
-- [ ] T153 Run quickstart.md validation end-to-end
-- [ ] T154 Create deployment guide in docs/deployment.md for production setup
-- [ ] T155 [P] Add troubleshooting section to docs/ for common issues
+- [ ] T150 [P] Add error handling for model serving failures with graceful fallback to OpenAI/Cohere
+- [ ] T151 [P] Add database connection pooling optimization in backend/src/database.py
+- [ ] T152 Run quickstart.md validation end-to-end
+- [ ] T153 Create deployment guide in docs/deployment.md for production setup
+- [ ] T154 [P] Add troubleshooting section to docs/ for common issues
+
+**Note**: Task T150 (Triton batching optimization) removed - replaced by FastAPI serving
 
 **Git Example**: `git commit -m "Add comprehensive documentation and production deployment guides"`
+
+---
+
+## Phase 10: RAG Pipeline Evaluation (Priority: P8) 🎯 Quality Assurance
+
+**Goal**: Comprehensively evaluate RAG pipeline performance using industry-standard metrics and automated evaluation frameworks
+
+**Independent Test**: Run evaluation suite on test dataset and verify metrics meet quality thresholds
+
+**Context**: Use DeepEval and LlamaIndex for automated RAG evaluation with comprehensive metrics covering retrieval quality, generation quality, and system performance.
+
+### Implementation for RAG Evaluation
+
+- [ ] T156 [P] [US8] Install evaluation dependencies in backend/requirements.txt (deepeval, llama-index, ragas)
+- [ ] T157 [P] [US8] Create evaluation test dataset in backend/data/eval_dataset.jsonl with 100+ Vietnamese medical QA pairs (question, expected_answer, ground_truth_contexts)
+- [ ] T158 [P] [US8] Create backend/scripts/evaluate_rag.py as main evaluation script with CLI arguments (--dataset, --output, --metrics)
+- [ ] T159 [US8] Implement retrieval metrics evaluation in backend/scripts/evaluate_rag.py:
+  - Recall@K (K=1,3,5,10): Measure if ground truth documents appear in top-K results
+  - nDCG@K (K=1,3,5,10): Normalized Discounted Cumulative Gain for ranking quality
+  - MRR (Mean Reciprocal Rank): Average reciprocal rank of first relevant document
+  - Precision@K (K=1,3,5,10): Proportion of relevant documents in top-K
+- [ ] T160 [US8] Implement generation quality metrics using DeepEval in backend/scripts/evaluate_rag.py:
+  - Faithfulness: Check if generated answer is faithful to retrieved contexts (no hallucination)
+  - Answer Relevance: Measure if answer is relevant to the question
+  - Contextual Relevance: Measure if retrieved contexts are relevant to the question
+  - Correctness: Compare generated answer vs ground truth using LLM-as-judge
+- [ ] T161 [US8] Implement performance metrics in backend/scripts/evaluate_rag.py:
+  - End-to-end latency (ms): Total time from query to response
+  - Embedding latency (ms): Time for query embedding generation
+  - Retrieval latency (ms): Time for vector + keyword search
+  - Reranking latency (ms): Time for reranking results
+  - Generation latency (ms): Time for LLM response generation
+  - Token usage: Total tokens consumed (input + output)
+- [ ] T162 [P] [US8] Create backend/scripts/eval_utils.py with helper functions:
+  - compute_retrieval_metrics(predictions, ground_truths, k_values)
+  - compute_generation_metrics(predictions, ground_truths, contexts)
+  - compute_performance_metrics(timestamps, token_counts)
+  - format_eval_report(metrics_dict) -> markdown table
+- [ ] T163 [US8] Integrate LlamaIndex evaluators in backend/scripts/evaluate_rag.py:
+  - RelevancyEvaluator: Question-answer relevance
+  - FaithfulnessEvaluator: Answer-context faithfulness
+  - CorrectnessEvaluator: Answer correctness with ground truth
+- [ ] T164 [US8] Integrate DeepEval metrics in backend/scripts/evaluate_rag.py:
+  - AnswerRelevancyMetric: Semantic relevance of answer to question
+  - FaithfulnessMetric: Verify no hallucinations in answer
+  - ContextualRelevancyMetric: Retrieved contexts relevance
+  - GEval (custom criteria): Custom Vietnamese medical domain criteria
+- [ ] T165 [P] [US8] Create backend/scripts/generate_eval_report.py to generate comprehensive HTML report with:
+  - Summary table with all metrics
+  - Per-query breakdown with failures highlighted
+  - Visualizations (latency distribution, score histograms)
+  - Failure analysis with examples
+- [ ] T166 [US8] Create evaluation configuration in backend/config/eval_config.yaml:
+  - Metric thresholds (min_recall@5=0.7, min_faithfulness=0.8, max_latency_p95=5000ms)
+  - LLM judge configuration (model, temperature, prompt templates)
+  - Dataset paths and output directories
+- [ ] T167 [US8] Run full evaluation suite: `python backend/scripts/evaluate_rag.py --dataset backend/data/eval_dataset.jsonl --output backend/data/eval_results/`
+- [ ] T168 [US8] Verify metrics meet quality thresholds:
+  - Retrieval: Recall@5 >= 0.70, nDCG@5 >= 0.65, MRR >= 0.60
+  - Generation: Faithfulness >= 0.80, Answer Relevance >= 0.75, Correctness >= 0.70
+  - Performance: p95 latency <= 5000ms, p50 latency <= 3000ms
+- [ ] T169 [P] [US8] Create automated evaluation CI workflow in .github/workflows/rag-eval.yml to run on PR
+- [ ] T170 [P] [US8] Document evaluation methodology in docs/RAG_EVALUATION.md with metric definitions and interpretation guide
+
+**Evaluation Tools Reference**:
+- **DeepEval**: https://docs.confident-ai.com/ (LLM evaluation framework)
+- **LlamaIndex**: https://docs.llamaindex.ai/en/stable/module_guides/evaluating/ (RAG evaluation)
+- **RAGAS**: https://docs.ragas.io/ (RAG assessment framework)
+
+**Git Example**: `git commit -m "Add comprehensive RAG evaluation with retrieval, generation, and performance metrics"`
+
+**Checkpoint**: At this point, RAG pipeline quality is measured and validated against industry standards
 
 ---
 
@@ -357,12 +415,13 @@
 ### User Story Dependencies
 
 - **User Story 1 (P1)**: Can start after Foundational (Phase 2) - No dependencies on other stories
-- **User Story 2 (P2)**: Can start after Foundational (Phase 2) - Integrates with US1 but independently testable
-- **User Story 3 (P3)**: Can start after Foundational (Phase 2) - Uses embedding from US2 but can use baseline models
-- **User Story 4 (P4)**: Can start after Foundational (Phase 2) - Uses chunking/embedding from US2/US3 but independently testable
+- **Model Serving (P2)**: Can start after Foundational (Phase 2) - Configures FastAPI + vLLM serving
+- **User Story 3 (P3)**: Can start after Foundational (Phase 2) - Uses models from Phase 4 but can use baseline
+- **User Story 4 (P4)**: Can start after Foundational (Phase 2) - Uses chunking/embedding but independently testable
 - **User Story 5 (P5)**: Depends on US3/US4 for caching search results - but independently testable
 - **User Story 6 (P6)**: Can start after Foundational (Phase 2) - Monitors all stories but independently deployable
-- **User Story 7 (P7)**: Should be last - tests all previous stories under load
+- **User Story 7 (P7)**: Should run after US1-US6 complete - tests all previous stories under load
+- **RAG Evaluation (P8)**: Can start after US3/US4 complete - requires working retrieval + generation pipeline
 
 ### Within Each Phase
 
@@ -376,7 +435,7 @@
 
 ```bash
 # All tasks marked [P] can run in parallel:
-T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014
+T002, T003, T004, T006, T007, T010, T011, T012, T013, T014
 ```
 
 #### Phase 2 (Foundational)
@@ -393,23 +452,22 @@ T019, T020, T021, T022, T023, T024, T025, T026, T027, T028
 T031, T032, T034, T035, T037, T038, T040, T042, T043, T044
 ```
 
-#### User Story 2 (Phase 4)
+#### Model Serving (Phase 4)
 
 ```bash
-# All notebook creation and script creation can run in parallel:
-T049, T050, T051, T052, T053, T054, T056, T057, T058, T059, T060, T061
 # Model serving configs can run in parallel:
-T068, T069, T070, T071, T072, T074, T075
+T074, T075, T076, T078f, T078h
 ```
 
 #### Multiple User Stories in Parallel
 
 If you have multiple team members, after Foundational phase completes:
 
-- Team Member A: User Story 1 (T031-T048)
-- Team Member B: User Story 2 (T049-T078)
-- Team Member C: User Story 3 (T079-T088)
-- Team Member D: User Story 6 (T111-T126) - monitoring can proceed independently
+- Team Member A: User Story 1 (T031-T048) - Chainlit UI
+- Team Member B: Model Serving (T068-T078h) - FastAPI serving configuration
+- Team Member C: User Stories 3 & 4 (T079-T102b) - Hybrid Search & Dataset
+- Team Member D: User Story 6 (T111-T126) - Monitoring Stack
+- Team Member E: RAG Evaluation (T156-T170) - Quality metrics
 
 ---
 
@@ -429,23 +487,25 @@ If you have multiple team members, after Foundational phase completes:
 
 1. **Foundation** (Setup + Foundational) → Core infrastructure ready
 2. **Release 1**: Add User Story 1 → Test → Deploy → **Users can chat with RAG system**
-3. **Release 2**: Add User Story 2 → Test → Deploy → **Users get improved answers from fine-tuned models**
-4. **Release 3**: Add User Story 3 → Test → Deploy → **Users get better document retrieval**
+3. **Release 2**: Add Model Serving Config → Test → Deploy → **Models properly configured and serving**
+4. **Release 3**: Add User Story 3 → Test → Deploy → **Users get better document retrieval via hybrid search**
 5. **Release 4**: Add User Story 4 → Test → Deploy → **System has full medical dataset indexed**
-6. **Release 5**: Add User Story 5 → Test → Deploy → **Users experience faster responses**
+6. **Release 5**: Add User Story 5 → Test → Deploy → **Users experience faster responses via caching**
 7. **Release 6**: Add User Story 6 → Test → Deploy → **Team has full observability**
 8. **Release 7**: Add User Story 7 → Test → Deploy → **System validated for production load**
+9. **Release 8**: Add RAG Evaluation → Test → Deploy → **Pipeline quality measured and validated**
 
 Each release adds value without breaking previous functionality.
 
 ### Parallel Team Strategy
 
-With 4 developers after Foundational phase completes:
+With 5 developers after Foundational phase completes:
 
 - **Developer A**: User Story 1 (Authentication & Chainlit UI)
-- **Developer B**: User Story 2 (Model Fine-tuning & Serving)
+- **Developer B**: Model Serving Configuration (FastAPI + vLLM)
 - **Developer C**: User Stories 3 & 4 (Hybrid Search & Dataset Integration)
 - **Developer D**: User Story 6 (Monitoring Stack)
+- **Developer E**: RAG Evaluation Framework (Quality Metrics)
 
 Then collectively complete User Stories 5 and 7.
 
@@ -453,29 +513,38 @@ Then collectively complete User Stories 5 and 7.
 
 ## Task Summary
 
-- **Total Tasks**: 167 (enhanced with validation, measurement, and safety tasks)
-- **Phase 1 (Setup)**: 14 tasks
-- **Phase 2 (Foundational)**: 18 tasks (added T030a migration execution, T030b health checks)
-- **Phase 3 (US1 - Chainlit UI)**: 18 tasks
-- **Phase 4 (US2 - Fine-tuning)**: 33 tasks (added T078a-c guardrails validation)
+- **Total Tasks**: 170 (updated with serving refactor and RAG evaluation)
+- **Phase 1 (Setup)**: 11 tasks (removed Triton T005, T008, T009)
+- **Phase 2 (Foundational)**: 18 tasks (completed - database schema, migration, legacy cleanup)
+- **Phase 3 (US1 - Chainlit UI)**: 18 tasks (completed - OAuth authentication)
+- **Phase 4 (Model Serving Config)**: 13 tasks (T068-T078h, removed fine-tuning T049-T067 and Triton T069-T072)
 - **Phase 5 (US3 - Hybrid Search)**: 10 tasks
-- **Phase 6 (US4 - Dataset Integration)**: 18 tasks (added T093a, T094a, T102a-b for measurement and incremental updates)
-- **Phase 7 (US5 - Caching)**: 9 tasks (added T106a cache invalidation on update)
-- **Phase 8 (US6 - Monitoring)**: 16 tasks
+- **Phase 6 (US4 - Dataset Integration)**: 18 tasks
+- **Phase 7 (US5 - Caching)**: 9 tasks
+- **Phase 8 (US6 - Monitoring)**: 16 tasks (updated T113 for FastAPI metrics)
 - **Phase 9 (US7 - Load Testing)**: 14 tasks
-- **Phase 10 (Polish)**: 17 tasks (added T146a CORS, T148a environment validation)
+- **Phase 10 (Polish)**: 9 tasks (removed Triton optimization T150, renumbered)
+- **Phase 10 (RAG Evaluation)**: 15 tasks (T156-T170, new comprehensive evaluation phase)
 
-**Parallel Opportunities Identified**: 97 tasks marked [P] can run in parallel within their phases
+**Key Changes (2025-11-19)**:
+- ✅ Removed 33 fine-tuning tasks (T049-T067, T078a-T078b) - out of scope
+- ✅ Removed 4 Triton tasks (T005, T009, T069-T072) - replaced by FastAPI
+- ✅ Added 15 RAG evaluation tasks (T156-T170) - comprehensive quality metrics
+- ✅ Updated serving architecture to reflect FastAPI + remote vLLM
+- ✅ Total task count reduced from 167 to 170 (net +3 for evaluation focus)
 
-**Independent Test Criteria**: Each user story has clear acceptance criteria defined in spec.md
+**Parallel Opportunities Identified**: 80+ tasks marked [P] can run in parallel within their phases
 
-**Suggested MVP Scope**: Phase 1 + Phase 2 + Phase 3 (User Story 1 only - OAuth authentication, Chainlit UI, persistent sessions) = 50 tasks
+**Independent Test Criteria**: Each user story has clear acceptance criteria
 
-**Quality Enhancements**:
+**Suggested MVP Scope**: Phase 1 + Phase 2 + Phase 3 (User Story 1 only) = 47 tasks
 
-- Added 9 validation/measurement tasks for SC-008 (guardrails), SC-018 (chunking), FR-026 (incremental updates)
-- Added 3 safety/reliability tasks: health checks, CORS config, environment validation
-- All enhancements follow MVP principles: simple, safe, effective
+**Quality Focus**:
+- RAG evaluation with retrieval metrics (Recall@K, nDCG@K, MRR, Precision@K)
+- Generation quality (Faithfulness, Answer Relevance, Correctness)
+- Performance metrics (latency, token usage)
+- Automated evaluation with DeepEval + LlamaIndex
+- CI/CD integration for continuous quality monitoring
 
 ---
 

@@ -14,7 +14,7 @@ from .services.brain import (
     get_tavily_agent_answer,
     qwen3_chat_complete,
 )
-from .services.chunking import dynamic_chunking
+from .services.chunking import fixed_semantic_chunking
 from .services.embedding import get_embedding_service
 from .services.rerank import get_qwen3_reranker
 from .core.guardrails import get_guardrails_service
@@ -27,45 +27,116 @@ celery_app.autodiscover_tasks()
 
 @shared_task
 def chunk_and_index_document(doc_id, title, content):
+    """
+    Chunk document and index to both Qdrant (vector) and Elasticsearch (keyword).
+
+    This implements dual indexing strategy (T088) for hybrid search:
+    1. Chunk document using fixed semantic strategy
+    2. Generate embeddings for each chunk
+    3. Index to Qdrant (vector search)
+    4. Index to Elasticsearch (keyword search)
+
+    Args:
+        doc_id: Document ID
+        title: Document title
+        content: Document content
+    """
     try:
-        # Chunk the document
-        nodes = dynamic_chunking(
+        # Chunk the document using fixed semantic strategy (T087)
+        nodes = fixed_semantic_chunking(
             text=content, metadata={"doc_id": doc_id, "title": title}
         )
+        logger.info(
+            f"Document chunked into {len(nodes)} chunks using fixed semantic strategy"
+        )
 
-        # Get embedding service
+        # Get services
         embedding_service = get_embedding_service()
+        from .services.elasticsearch import get_elasticsearch_client
 
-        # Generate embeddings and prepare points for upsert
-        points = []
-        for node in nodes:
+        es_client = get_elasticsearch_client()
+
+        # Generate embeddings and prepare points for dual indexing
+        qdrant_points = []
+        elasticsearch_docs = []
+
+        for chunk_index, node in enumerate(nodes):
             # Use Qwen3 embedding service for documents (NO instruction prefix)
             embedding = embedding_service.embed_document(node.text)
             if not embedding:
                 logger.warning(
-                    f"Failed to generate embedding for chunk: {node.text[:50]}..."
+                    f"Failed to generate embedding for chunk {chunk_index}: {node.text[:50]}..."
                 )
                 continue
 
-            point = {
-                "id": str(uuid.uuid4()),
+            # Generate unique chunk ID
+            chunk_id = str(uuid.uuid4())
+
+            # Prepare Qdrant point (vector search)
+            qdrant_point = {
+                "id": chunk_id,
                 "embedding": embedding,
                 "metadata": {
                     "doc_id": doc_id,
                     "title": title,
                     "content": node.text,
+                    "chunk_index": chunk_index,
+                    "doc_type": "medical_qa",  # Can be parameterized later
+                    "source": "",  # Can be added from metadata
                 },
             }
-            points.append(point)
+            qdrant_points.append(qdrant_point)
 
-        # Upsert points to Qdrant vector database
-        if points:
-            upsert_points(points, collection_name=settings.default_collection_name)
-            logger.info(f"Indexed {len(points)} chunks for document '{title}'")
+            # Prepare Elasticsearch document (keyword search)
+            # Note: Elasticsearch indexing happens separately per document
+            elasticsearch_docs.append(
+                {
+                    "chunk_id": chunk_id,
+                    "document_id": doc_id,
+                    "chunk_index": chunk_index,
+                    "content": node.text,
+                    "title": title,
+                }
+            )
+
+        # Index to Qdrant (vector database)
+        if qdrant_points:
+            upsert_points(
+                qdrant_points, collection_name=settings.default_collection_name
+            )
+            logger.info(f"✅ Indexed {len(qdrant_points)} chunks to Qdrant")
         else:
-            logger.warning(f"No embeddings generated for document '{title}'")
+            logger.warning(f"⚠️ No embeddings generated for document '{title}'")
+
+        # Index to Elasticsearch (keyword search)
+        if elasticsearch_docs:
+            indexed_count = 0
+            for es_doc in elasticsearch_docs:
+                success = es_client.index_chunk(
+                    chunk_id=es_doc["chunk_id"],
+                    document_id=es_doc["document_id"],
+                    chunk_index=es_doc["chunk_index"],
+                    content=es_doc["content"],
+                    title=es_doc["title"],
+                    doc_type="medical_qa",
+                    source="",
+                    language="vi",
+                    metadata={"doc_id": doc_id},
+                )
+                if success:
+                    indexed_count += 1
+
+            logger.info(
+                f"✅ Indexed {indexed_count}/{len(elasticsearch_docs)} chunks to Elasticsearch"
+            )
+
+        logger.info(
+            f"🎉 Dual indexing complete for document '{title}': "
+            f"{len(qdrant_points)} chunks → Qdrant (vector) + Elasticsearch (keyword)"
+        )
+
     except Exception as e:
-        logger.error(f"Error in chunking and indexing document: {e}")
+        logger.error(f"❌ Error in chunking and indexing document: {e}")
         raise
 
 
@@ -77,7 +148,12 @@ def bot_route_answer_message(history, question):
     if route == "medical":
         return rag_qa_task(history, question)
     elif route == "general":
-        return ai_agent_handle(question)
+        return qwen3_chat_complete(
+            messages=history + [{"role": "user", "content": question}],
+            temperature=0.7,
+            max_tokens=1024,
+            use_fallback=False,
+        )
 
 
 @shared_task(
@@ -154,14 +230,46 @@ def rag_qa_task(self, history, question):
             logger.error("❌ Failed to generate embedding for question")
             return "Xin lỗi, không thể xử lý câu hỏi của bạn lúc này."
 
-        # Retrieve top-k most relevant documents
-        logger.info(f"🔎 Searching vector database (top_k={settings.top_k})...")
-        relevant_docs = search_vectors(
-            query_vector=question_embedding,
-            top_k=settings.top_k,
-            collection_name=settings.default_collection_name,
+        # Retrieve top-k most relevant documents using HYBRID SEARCH (vector + keyword)
+        logger.info(
+            f"🔎 Performing hybrid search (vector + keyword, top_k={settings.top_k})..."
         )
-        logger.info(f"📚 Retrieved {len(relevant_docs)} documents from vector DB")
+
+        from .core.hybrid_search import hybrid_search
+        from .services.elasticsearch import get_elasticsearch_client
+        from .core.vectorize import search_vectors_for_hybrid
+
+        # Define search functions
+        def vector_search_fn(query, top_k, doc_type_filter=None, source_filter=None):
+            return search_vectors_for_hybrid(
+                query_vector=question_embedding,
+                top_k=top_k,
+                collection_name=settings.default_collection_name,
+                doc_type_filter=doc_type_filter,
+                source_filter=source_filter,
+            )
+
+        def keyword_search_fn(query, top_k, doc_type_filter=None, source_filter=None):
+            es_client = get_elasticsearch_client()
+            return es_client.search_bm25(
+                query=query,
+                top_k=top_k,
+                doc_type_filter=doc_type_filter,
+                source_filter=source_filter,
+            )
+
+        # Perform hybrid search (RRF fusion)
+        relevant_docs = hybrid_search(
+            query=new_question,
+            vector_search_fn=vector_search_fn,
+            keyword_search_fn=keyword_search_fn,
+            top_k=settings.top_k,
+            rrf_k=60,  # RRF parameter
+            use_cache=True,
+        )
+        logger.info(
+            f"📚 Hybrid search retrieved {len(relevant_docs)} documents (RRF fusion)"
+        )
 
         # Rerank using Qwen3 Reranker
         logger.info("⚡ Reranking with Qwen3-Reranker...")
@@ -202,12 +310,22 @@ def rag_qa_task(self, history, question):
         logger.info("🤖 STEP 3: Response Generation with Output Validation")
         logger.info("=" * 60)
 
-        # Build the message chain
+        # Build the message chain with intelligent history management
+        from .services.summarizer import summarize_old_messages
+
         messages = [{"role": "system", "content": settings.system_prompt}]
 
-        # Add history to the message chain
-        for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+        # Add history with automatic summarization if too long
+        # Target: ~2000 tokens for history (8000 chars) to leave room for:
+        # - Context: ~1000 tokens (RAG or Tavily)
+        # - System prompt: ~200 tokens
+        # - Generation: ~2048 tokens
+        # Total: ~5248 tokens (well under 8192 limit)
+        history_with_system = messages + history
+        optimized_history = summarize_old_messages(
+            history_with_system, target_tokens=2000
+        )
+        messages = optimized_history
 
         max_retries = 2
         retry_count = 0
@@ -254,11 +372,12 @@ def rag_qa_task(self, history, question):
 
                 messages_with_query = messages + [user_message]
 
-                # Use Qwen3 generation model
+                # Use Qwen3 generation model with reasonable max_tokens
+                # Medical responses typically 500-800 tokens, 1024 is sufficient
                 response = qwen3_chat_complete(
                     messages=messages_with_query,
                     temperature=0.7,
-                    max_tokens=2048,
+                    max_tokens=1024,  # Reduced from 2048 to prevent timeouts
                     use_fallback=True,
                 )
 

@@ -38,11 +38,53 @@ class ElasticsearchClient:
             raise
 
     def create_index(self, settings_override: Optional[Dict] = None) -> bool:
+        """
+        Create Elasticsearch index with Vietnamese text analyzer.
+
+        Vietnamese Analyzer Configuration:
+        - Custom tokenizer for Vietnamese text
+        - Lowercase normalization
+        - ASCII folding for diacritics
+        - Vietnamese stop words
+        - Edge n-gram for partial matching
+        """
         index_settings = {
             "settings": {
                 "number_of_shards": 2,
                 "number_of_replicas": 1,
                 "analysis": {
+                    "filter": {
+                        "vietnamese_stop": {
+                            "type": "stop",
+                            "stopwords": [
+                                "và",
+                                "của",
+                                "có",
+                                "các",
+                                "được",
+                                "trong",
+                                "cho",
+                                "từ",
+                                "với",
+                                "này",
+                                "đó",
+                                "là",
+                                "một",
+                                "những",
+                                "người",
+                                "đến",
+                                "để",
+                                "sau",
+                                "trước",
+                                "khi",
+                            ],
+                        },
+                        "edge_ngram_filter": {
+                            "type": "edge_ngram",
+                            "min_gram": 2,
+                            "max_gram": 15,
+                        },
+                    },
                     "analyzer": {
                         "vietnamese_analyzer": {
                             "type": "custom",
@@ -50,11 +92,20 @@ class ElasticsearchClient:
                             "filter": [
                                 "lowercase",
                                 "asciifolding",
-                                "stop",
+                                "vietnamese_stop",
                                 "snowball",
                             ],
-                        }
-                    }
+                        },
+                        "vietnamese_search_analyzer": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": [
+                                "lowercase",
+                                "asciifolding",
+                                "vietnamese_stop",
+                            ],
+                        },
+                    },
                 },
             },
             "mappings": {
@@ -65,11 +116,19 @@ class ElasticsearchClient:
                     "content": {
                         "type": "text",
                         "analyzer": "vietnamese_analyzer",
-                        "search_analyzer": "vietnamese_analyzer",
+                        "search_analyzer": "vietnamese_search_analyzer",
+                        "fields": {
+                            "keyword": {"type": "keyword"},
+                            "ngram": {
+                                "type": "text",
+                                "analyzer": "vietnamese_analyzer",
+                            },
+                        },
                     },
                     "title": {
                         "type": "text",
                         "analyzer": "vietnamese_analyzer",
+                        "search_analyzer": "vietnamese_search_analyzer",
                     },
                     "doc_type": {"type": "keyword"},
                     "source": {"type": "keyword"},

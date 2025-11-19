@@ -62,6 +62,20 @@ cache_misses_total = Counter(
     ["cache_type"],
 )
 
+# Search metrics
+rag_search_requests_total = Counter(
+    "rag_search_requests_total",
+    "Total number of RAG search requests by type",
+    ["search_type"],  # vector, keyword, hybrid
+)
+
+rag_search_duration_seconds = Histogram(
+    "rag_search_duration_seconds",
+    "Search duration by type in seconds",
+    ["search_type"],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
+)
+
 # Model inference metrics
 model_inference_duration_seconds = Histogram(
     "model_inference_duration_seconds",

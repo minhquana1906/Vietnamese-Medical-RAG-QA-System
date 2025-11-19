@@ -423,7 +423,7 @@ components:
           example: 0.87
         source:
           type: string
-          example: "combined_medical_dataset"
+          example: "vietnamese_medical_corpus_dataset"
         doc_type:
           type: string
           enum: [clinical_guideline, drug_info, medical_qa, research_paper, other]
