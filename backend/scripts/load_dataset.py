@@ -25,7 +25,9 @@ logging.basicConfig(level=logging.INFO)
 
 
 def load_vietnamese_medical_corpus(
-    output_dir: Path, cache_dir: Optional[Path] = None
+    output_dir: Path, 
+    cache_dir: Optional[Path] = None,
+    streaming: bool = False
 ) -> None:
     """
     Load quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub.
@@ -36,11 +38,17 @@ def load_vietnamese_medical_corpus(
     Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
 
     Args:
-        output_dir: Directory to save the dataset
+        output_dir: Directory to save the dataset (ignored if streaming=True)
         cache_dir: Optional cache directory for HuggingFace datasets
+        streaming: If True, use streaming mode (no local download, process on-the-fly)
+                  Recommended for large datasets or one-time indexing
+    
+    Returns:
+        Dataset object (either full dataset or IterableDataset if streaming)
     """
+    mode = "STREAMING" if streaming else "DOWNLOAD"
     logger.info(
-        "Loading quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub..."
+        f"Loading quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub ({mode} mode)..."
     )
 
     try:
@@ -48,25 +56,43 @@ def load_vietnamese_medical_corpus(
         dataset = load_dataset(
             "quannguyen204/vietnamese_medical_corpus_dataset",
             cache_dir=str(cache_dir) if cache_dir else None,
+            streaming=streaming,
         )
 
-        # Save to disk
-        dataset_path = output_dir / "vietnamese_medical_corpus"
-        dataset_path.mkdir(parents=True, exist_ok=True)
+        if streaming:
+            # Streaming mode: no download, process on-the-fly
+            logger.info(
+                f"✓ Successfully initialized streaming dataset (quannguyen204/vietnamese_medical_corpus_dataset)"
+            )
+            logger.info(
+                f"  Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
+            )
+            logger.info(f"  Mode: STREAMING (no local download, on-the-fly processing)")
+            logger.info(f"  Memory: Efficient (loads batches incrementally)")
+            
+            # Log available splits
+            logger.info(f"  Available splits: {list(dataset.keys())}")
+            
+        else:
+            # Download mode: save to disk for reuse
+            dataset_path = output_dir / "vietnamese_medical_corpus"
+            dataset_path.mkdir(parents=True, exist_ok=True)
 
-        dataset.save_to_disk(str(dataset_path))
+            dataset.save_to_disk(str(dataset_path))
 
-        logger.info(
-            f"✓ Successfully loaded quannguyen204/vietnamese_medical_corpus_dataset"
-        )
-        logger.info(f"  Saved to: {dataset_path}")
-        logger.info(
-            f"  Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
-        )
+            logger.info(
+                f"✓ Successfully downloaded quannguyen204/vietnamese_medical_corpus_dataset"
+            )
+            logger.info(f"  Saved to: {dataset_path}")
+            logger.info(
+                f"  Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
+            )
 
-        # Log split information
-        for split_name, split_data in dataset.items():
-            logger.info(f"  {split_name.capitalize()} samples: {len(split_data)}")
+            # Log split information
+            for split_name, split_data in dataset.items():
+                logger.info(f"  {split_name.capitalize()} samples: {len(split_data)}")
+        
+        return dataset
 
     except Exception as e:
         logger.error(
@@ -92,10 +118,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Load Vietnamese medical corpus dataset (default)
+    # Download mode (default): Save to disk for reuse
     python -m backend.scripts.load_dataset
 
-    # Specify custom output directory
+    # Streaming mode: No download, process on-the-fly (recommended for large datasets)
+    python -m backend.scripts.load_dataset --streaming
+
+    # Specify custom output directory (download mode only)
     python -m backend.scripts.load_dataset --output-dir /path/to/data
 
     # Specify custom cache directory
@@ -122,6 +151,13 @@ Dataset Information:
         help="Cache directory for HuggingFace datasets (default: ~/.cache/huggingface)",
     )
 
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Use streaming mode (no local download, process on-the-fly). "
+             "Recommended for large datasets or one-time indexing.",
+    )
+
     args = parser.parse_args()
 
     # Setup paths
@@ -137,14 +173,18 @@ Dataset Information:
     logger.info(
         f"URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
     )
-    logger.info(f"Output directory: {output_dir}")
+    logger.info(f"Mode: {'STREAMING' if args.streaming else 'DOWNLOAD'}")
+    if not args.streaming:
+        logger.info(f"Output directory: {output_dir}")
     if cache_dir:
         logger.info(f"Cache directory: {cache_dir}")
     logger.info("")
 
     # Load dataset
     try:
-        load_vietnamese_medical_corpus(output_dir, cache_dir)
+        dataset = load_vietnamese_medical_corpus(
+            output_dir, cache_dir, streaming=args.streaming
+        )
 
         logger.info("")
         logger.info("=" * 80)

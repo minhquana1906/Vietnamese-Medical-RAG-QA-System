@@ -29,6 +29,14 @@ from .schemas.schema import (
     RerankResponse,
     GuardRequest,
     GuardResponse,
+    IngestDatasetRequest,
+    IngestDatasetResponse,
+    IndexingJobStatusResponse,
+    DocumentCreate,
+    DocumentResponse,
+    DocumentDetailResponse,
+    DocumentListResponse,
+    ReindexDocumentResponse,
 )
 from .services.rag_service import handle_rag_query
 from .tasks import chunk_and_index_document
@@ -399,4 +407,355 @@ async def guard_endpoint(request: GuardRequest):
 
     except Exception as e:
         logger.error(f"Guardrails error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Document Management & Indexing Endpoints
+# ============================================================================
+
+
+@app.post("/indexing/ingest-dataset", response_model=IngestDatasetResponse)
+async def ingest_dataset(request: IngestDatasetRequest):
+    """
+    Ingest a HuggingFace dataset by loading, chunking, and indexing to Qdrant + Elasticsearch.
+    
+    Returns a job ID for tracking progress via GET /indexing/jobs/{job_id}.
+    """
+    try:
+        from .tasks import ingest_dataset_task
+
+        # Start async Celery task
+        task = ingest_dataset_task.delay(
+            dataset_name=request.dataset_name,
+            dataset_config=request.dataset_config,
+            split=request.split,
+            doc_type=request.doc_type,
+            max_documents=request.max_documents,
+        )
+
+        logger.info(
+            f"Dataset ingestion started: {request.dataset_name} (job_id: {task.id})"
+        )
+
+        return IngestDatasetResponse(
+            job_id=task.id,
+            status="pending",
+            message="Dataset ingestion started",
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to start dataset ingestion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/indexing/jobs/{job_id}", response_model=IndexingJobStatusResponse)
+async def get_indexing_job_status(job_id: str):
+    """
+    Check the status of a background indexing job.
+    
+    Returns job status (pending, running, completed, failed) with progress information.
+    """
+    try:
+        from celery.result import AsyncResult
+        from .configs.celery_config import celery_app
+
+        task_result = AsyncResult(job_id, app=celery_app)
+
+        status = task_result.status.lower()
+        
+        response = IndexingJobStatusResponse(
+            job_id=job_id,
+            status=status,
+            progress=None,
+            result=None,
+            error=None,
+        )
+
+        if status == "pending":
+            response.status = "pending"
+        elif status == "started" or status == "progress":
+            response.status = "running"
+            # Get progress info from task state
+            if task_result.info and isinstance(task_result.info, dict):
+                response.progress = task_result.info
+        elif status == "success":
+            response.status = "completed"
+            response.result = task_result.result
+        elif status == "failure":
+            response.status = "failed"
+            response.error = str(task_result.info)
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Failed to get job status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/documents", response_model=DocumentListResponse)
+async def list_documents(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    source: Optional[str] = Query(None),
+    doc_type: Optional[str] = Query(None),
+    is_indexed: Optional[bool] = Query(None),
+):
+    """
+    List all documents with pagination and filtering.
+    """
+    try:
+        from sqlalchemy import func
+        from .models import Document
+        
+        with SessionLocal() as db:
+            # Build query
+            query = db.query(Document)
+            
+            # Apply filters
+            if source:
+                query = query.filter(Document.metadata_["source"].astext == source)
+            if doc_type:
+                query = query.filter(Document.metadata_["doc_type"].astext == doc_type)
+            if is_indexed is not None:
+                query = query.filter(
+                    Document.metadata_["is_indexed"].astext == str(is_indexed).lower()
+                )
+            
+            # Get total count
+            total = query.count()
+            
+            # Apply pagination
+            documents = query.order_by(Document.createdAt.desc()).offset(offset).limit(limit).all()
+            
+            # Convert to response
+            doc_responses = []
+            for doc in documents:
+                metadata = doc.metadata_ or {}
+                doc_responses.append(
+                    DocumentResponse(
+                        id=doc.id,
+                        title=doc.title,
+                        content=doc.content,
+                        source=metadata.get("source"),
+                        doc_type=metadata.get("doc_type"),
+                        language=metadata.get("language", "vi"),
+                        created_at=doc.createdAt.isoformat() if doc.createdAt else "",
+                        is_indexed=metadata.get("is_indexed", False),
+                        metadata=metadata,
+                    )
+                )
+            
+            return DocumentListResponse(
+                documents=doc_responses,
+                total=total,
+                limit=limit,
+                offset=offset,
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to list documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/documents", response_model=DocumentResponse, status_code=201)
+async def create_document(request: DocumentCreate):
+    """
+    Manually create a document (not from HuggingFace dataset).
+    
+    Use POST /indexing/reindex-document/{document_id} to chunk and index this document.
+    """
+    try:
+        from .models import Document
+        
+        with SessionLocal() as db:
+            # Create document
+            metadata = request.metadata or {}
+            metadata.update({
+                "source": request.source,
+                "doc_type": request.doc_type,
+                "language": request.language,
+                "is_indexed": False,
+            })
+            
+            new_doc = Document(
+                title=request.title,
+                content=request.content,
+                metadata_=metadata,
+            )
+            
+            db.add(new_doc)
+            db.commit()
+            db.refresh(new_doc)
+            
+            logger.info(f"Created document: {new_doc.title} (ID: {new_doc.id})")
+            
+            return DocumentResponse(
+                id=new_doc.id,
+                title=new_doc.title,
+                content=new_doc.content,
+                source=metadata.get("source"),
+                doc_type=metadata.get("doc_type"),
+                language=metadata.get("language", "vi"),
+                created_at=new_doc.createdAt.isoformat(),
+                is_indexed=False,
+                metadata=metadata,
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to create document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/documents/{document_id}", response_model=DocumentDetailResponse)
+async def get_document(document_id: UUID):
+    """
+    Get document details with all chunks.
+    """
+    try:
+        from .models import Document, Chunk
+        from .schemas.schema import ChunkResponse
+        
+        with SessionLocal() as db:
+            doc = db.query(Document).filter(Document.id == document_id).first()
+            
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document not found")
+            
+            metadata = doc.metadata_ or {}
+            
+            # Get all chunks for this document
+            chunks = db.query(Chunk).filter(Chunk.documentId == document_id).order_by(Chunk.chunkIndex).all()
+            
+            chunk_responses = []
+            for chunk in chunks:
+                chunk_metadata = chunk.metadata_ or {}
+                chunk_responses.append(
+                    ChunkResponse(
+                        id=chunk.id,
+                        document_id=chunk.documentId,
+                        chunk_index=chunk.chunkIndex,
+                        content=chunk.content,
+                        token_count=chunk_metadata.get("token_count"),
+                        overlap_start=chunk_metadata.get("overlap_start"),
+                        overlap_end=chunk_metadata.get("overlap_end"),
+                        created_at=chunk.createdAt.isoformat() if chunk.createdAt else "",
+                        metadata=chunk_metadata,
+                    )
+                )
+            
+            return DocumentDetailResponse(
+                id=doc.id,
+                title=doc.title,
+                content=doc.content,
+                source=metadata.get("source"),
+                doc_type=metadata.get("doc_type"),
+                language=metadata.get("language", "vi"),
+                created_at=doc.createdAt.isoformat() if doc.createdAt else "",
+                is_indexed=metadata.get("is_indexed", False),
+                metadata=metadata,
+                chunks=chunk_responses,
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/documents/{document_id}", status_code=204)
+async def delete_document(document_id: UUID):
+    """
+    Delete document and all its chunks from PostgreSQL, Qdrant, and Elasticsearch.
+    """
+    try:
+        from .models import Document, Chunk
+        from .core.vectorize import qdrant_client, settings as vectorize_settings
+        from .services.elasticsearch import es_client, settings as es_settings
+        
+        with SessionLocal() as db:
+            doc = db.query(Document).filter(Document.id == document_id).first()
+            
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document not found")
+            
+            # Get all chunk IDs
+            chunks = db.query(Chunk).filter(Chunk.documentId == document_id).all()
+            chunk_ids = [str(chunk.id) for chunk in chunks]
+            
+            # Delete from Qdrant
+            if chunk_ids:
+                try:
+                    qdrant_client.delete(
+                        collection_name=vectorize_settings.qdrant_collection_name,
+                        points_selector=chunk_ids,
+                    )
+                    logger.info(f"Deleted {len(chunk_ids)} chunks from Qdrant")
+                except Exception as e:
+                    logger.warning(f"Failed to delete from Qdrant: {e}")
+            
+            # Delete from Elasticsearch
+            if chunk_ids:
+                try:
+                    for chunk_id in chunk_ids:
+                        try:
+                            es_client.delete(
+                                index=es_settings.elasticsearch_index,
+                                id=chunk_id,
+                                ignore=[404],
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to delete chunk {chunk_id} from Elasticsearch: {e}")
+                    logger.info(f"Deleted {len(chunk_ids)} chunks from Elasticsearch")
+                except Exception as e:
+                    logger.warning(f"Failed to delete from Elasticsearch: {e}")
+            
+            # Delete from PostgreSQL (cascades to chunks)
+            db.delete(doc)
+            db.commit()
+            
+            logger.info(f"Deleted document {document_id} with {len(chunk_ids)} chunks")
+            
+            return None
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/indexing/reindex-document/{document_id}", response_model=ReindexDocumentResponse)
+async def reindex_document(document_id: UUID):
+    """
+    Reindex a specific document by deleting existing chunks and re-chunking/re-indexing.
+    
+    Returns a job ID for tracking progress via GET /indexing/jobs/{job_id}.
+    """
+    try:
+        from .models import Document
+        from .tasks import reindex_document_task
+        
+        with SessionLocal() as db:
+            doc = db.query(Document).filter(Document.id == document_id).first()
+            
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Start async reindexing task
+        task = reindex_document_task.delay(str(document_id))
+        
+        logger.info(f"Document reindexing started: {document_id} (job_id: {task.id})")
+        
+        return ReindexDocumentResponse(
+            job_id=task.id,
+            status="pending",
+            message="Document reindexing started",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start reindexing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
