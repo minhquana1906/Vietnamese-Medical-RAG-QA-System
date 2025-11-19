@@ -15,11 +15,29 @@ settings = get_backend_settings()
 
 
 class Qwen3RerankerService:
+    """
+    Qwen3 Reranker Service following official Qwen3-Reranker-0.6B best practices.
+
+    Key Features:
+    - Format: <Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}
+    - System prompt: "Judge whether the Document meets the requirements..."
+    - Output: "yes"/"no" tokens with logprobs for scoring
+    - Instruction-aware: Custom instructions improve performance by 1-5%
+
+    Reference: https://huggingface.co/Qwen/Qwen3-Reranker-0.6B
+    """
+
+    # Default task instruction for medical retrieval (recommended by Qwen team)
+    DEFAULT_TASK_INSTRUCTION = (
+        "Given a medical question, retrieve relevant medical knowledge passages "
+        "that provide accurate information to answer the question"
+    )
 
     def __init__(
         self,
         local_url: str = "http://localhost:8000",
         cohere_fallback: bool = True,
+        task_instruction: Optional[str] = None,
     ):
         """
         Initialize Qwen3 Reranker Service with local FastAPI backend.
@@ -27,30 +45,52 @@ class Qwen3RerankerService:
         Args:
             local_url: Local backend URL
             cohere_fallback: Enable Cohere fallback if local fails
+            task_instruction: Custom task instruction (default: medical retrieval)
         """
         self.local_url = local_url
         self.huggingface_model = get_reranking_model()
+        self.task_instruction = task_instruction or self.DEFAULT_TASK_INSTRUCTION
 
         logger.debug(
             f"Init Qwen3RerankerService: Local={local_url}, Model={self.huggingface_model}"
         )
+        logger.debug(f"Task instruction: {self.task_instruction[:80]}...")
 
         self.cohere_fallback = cohere_fallback
         self.client = httpx.Client(timeout=30.0)
 
     def rerank(
-        self, query: str, documents: List[Dict[str, Any]], top_n: int = 5
+        self,
+        query: str,
+        documents: List[Dict[str, Any]],
+        top_n: int = 5,
+        task_instruction: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], str]:
+        """
+        Rerank documents using Qwen3-Reranker-0.6B.
+
+        Args:
+            query: User query
+            documents: List of document dicts (with 'title' and 'content' keys)
+            top_n: Number of top results to return
+            task_instruction: Override default task instruction
+
+        Returns:
+            Tuple of (reranked_results, formatted_context)
+        """
         # Try local reranker first
         try:
-            reranked_results = self._rerank_with_local(query, documents, top_n)
+            instruction = task_instruction or self.task_instruction
+            reranked_results = self._rerank_with_local(
+                query, documents, top_n, instruction
+            )
             rerank_context = self._format_rerank_context(documents, reranked_results)
             logger.debug(
-                f"Reranked {len(reranked_results)} documents with local Qwen3-Reranker"
+                f"✅ Reranked {len(reranked_results)} documents with Qwen3-Reranker"
             )
             return reranked_results, rerank_context
         except Exception as e:
-            logger.warning(f"Local Qwen3-Reranker failed: {e}")
+            logger.warning(f"❌ Local Qwen3-Reranker failed: {e}")
 
         # Fallback to Cohere
         if self.cohere_fallback:
@@ -58,7 +98,9 @@ class Qwen3RerankerService:
             return cohere_rerank(query, documents, top_n=top_n)
 
         # If no fallback, return original documents
-        logger.warning("No reranking fallback available, returning original documents")
+        logger.warning(
+            "⚠️ No reranking fallback available, returning original documents"
+        )
         rerank_context = self._format_rerank_context(
             documents,
             [
@@ -69,17 +111,31 @@ class Qwen3RerankerService:
         return documents[:top_n], rerank_context
 
     def _rerank_with_local(
-        self, query: str, documents: List[Dict[str, Any]], top_n: int
+        self,
+        query: str,
+        documents: List[Dict[str, Any]],
+        top_n: int,
+        instruction: str,
     ) -> List[Dict[str, Any]]:
-        """Call local FastAPI endpoint"""
-        # Prepare document texts
+        """
+        Call local FastAPI endpoint for Qwen3-Reranker-0.6B inference.
+
+        Format follows Qwen3 specification:
+        <Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}
+        """
+        # Prepare document texts (Title + Content)
         doc_texts = [
             f"Title: {doc.get('title', '')}\nContent: {doc.get('content', '')}"
             for doc in documents
         ]
 
-        # Local API request
-        payload = {"query": query, "documents": doc_texts, "top_n": top_n}
+        # Local API request (backend will format with Qwen3 template)
+        payload = {
+            "query": query,
+            "documents": doc_texts,
+            "top_n": top_n,
+            "instruction": instruction,  # Pass instruction to backend
+        }
 
         response = self.client.post(
             f"{self.local_url}/v1/models/rerank",

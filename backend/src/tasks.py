@@ -39,8 +39,8 @@ def chunk_and_index_document(doc_id, title, content):
         # Generate embeddings and prepare points for upsert
         points = []
         for node in nodes:
-            # Use Qwen3 embedding service
-            embedding = embedding_service.embed_text(node.text, use_cache=False)
+            # Use Qwen3 embedding service for documents (NO instruction prefix)
+            embedding = embedding_service.embed_document(node.text)
             if not embedding:
                 logger.warning(
                     f"Failed to generate embedding for chunk: {node.text[:50]}..."
@@ -144,9 +144,11 @@ def rag_qa_task(self, history, question):
         # Get embedding service (Qwen3)
         embedding_service = get_embedding_service()
 
-        # Generate embedding for question using Qwen3
-        logger.info("🔢 Generating embedding with Qwen3-Embedding...")
-        question_embedding = embedding_service.embed_text(new_question, use_cache=True)
+        # Generate embedding for question using Qwen3 (WITH instruction prefix)
+        logger.info(
+            "🔢 Generating embedding with Qwen3-Embedding (instruction-aware)..."
+        )
+        question_embedding = embedding_service.embed_query(new_question, use_cache=True)
 
         if not question_embedding:
             logger.error("❌ Failed to generate embedding for question")

@@ -1,25 +1,6 @@
 from typing import Dict, List, Optional
-from datetime import datetime
-from uuid import UUID
 
 from pydantic import BaseModel, Field
-
-# class CompleteRequest(BaseModel):
-
-#     bot_id: str = Field(
-#         default="Meddy",
-#         description="The ID of the bot to use for completion.",
-#     )
-#     user_id: str = Field(
-#         default="user_1", description="The ID of the user making the request."
-#     )
-#     user_message: str = Field(..., description="The message from the user.")
-#     is_sync_request: Optional[bool] = Field(
-#         False, description="Whether the request is synchronous or asynchronous."
-#     )
-#     metadata: Optional[Dict] = Field(
-#         None, description="Additional metadata for the request."
-#     )
 
 
 class RAGQueryRequest(BaseModel):
@@ -53,3 +34,50 @@ class SystemHealthResponse(BaseModel):
     api: HealthCheckResponse = Field(..., description="API health status")
     database: HealthCheckResponse = Field(..., description="Database health status")
     cache: HealthCheckResponse = Field(..., description="Cache health status")
+
+
+class EmbedRequest(BaseModel):
+    """Qwen3-Embedding request with instruction-awareness"""
+
+    texts: List[str]
+    normalize: bool = True
+    is_query: bool = False  # Set True for queries, False for documents
+    instruction: Optional[str] = None  # Optional custom instruction
+
+
+class EmbedResponse(BaseModel):
+    embeddings: List[List[float]]
+    model: str
+
+
+class RerankRequest(BaseModel):
+    """Qwen3-Reranker request with task instruction"""
+
+    query: str
+    documents: List[str]
+    top_n: int = 5
+    instruction: Optional[str] = None  # Optional custom instruction
+
+
+class RerankResponse(BaseModel):
+    scores: List[float]
+    indices: List[int]
+    model: str
+
+
+class GuardRequest(BaseModel):
+    """Qwen3Guard safety check request"""
+
+    text: str
+    check_type: str = "input"
+
+
+class GuardResponse(BaseModel):
+    """Qwen3Guard response with 3-tier severity and 9 categories"""
+
+    is_safe: bool
+    severity: str  # "Safe" | "Controversial" | "Unsafe"
+    categories: List[str]  # List of matched categories (0-8)
+    is_refusal: bool  # True if model refuses to answer
+    raw_output: str  # Raw model output for debugging/parsing
+    model: str
