@@ -193,11 +193,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T089 [P] [US4] Implement document ingestion endpoint in backend/src/main.py: POST /indexing/ingest-dataset per documents-api.yaml
-- [ ] T090 [P] [US4] Implement job status endpoint in backend/src/main.py: GET /indexing/jobs/{job_id} per documents-api.yaml
-- [ ] T091 [P] [US4] Implement document management endpoints in backend/src/main.py: GET /documents, POST /documents, GET /documents/{document_id}, DELETE /documents/{document_id} per documents-api.yaml
-- [ ] T092 [P] [US4] Implement reindex endpoint in backend/src/main.py: POST /indexing/reindex-document/{document_id} per documents-api.yaml
-- [ ] T093 [US4] Create chunk_and_index_document Celery task in backend/src/tasks.py for async document processing
+- [X] T089 [P] [US4] Implement document ingestion endpoint in backend/src/main.py: POST /indexing/ingest-dataset per documents-api.yaml
+- [X] T090 [P] [US4] Implement job status endpoint in backend/src/main.py: GET /indexing/jobs/{job_id} per documents-api.yaml
+- [X] T091 [P] [US4] Implement document management endpoints in backend/src/main.py: GET /documents, POST /documents, GET /documents/{document_id}, DELETE /documents/{document_id} per documents-api.yaml
+- [X] T092 [P] [US4] Implement reindex endpoint in backend/src/main.py: POST /indexing/reindex-document/{document_id} per documents-api.yaml
+- [X] T093 [US4] Create chunk_and_index_document Celery task in backend/src/tasks.py for async document processing
 - [ ] T093a [P] [US4] Create baseline chunking measurement script in ml/scripts/measure_chunking_baseline.py to capture current overlap/duplicate metrics before implementing new strategy
 - [ ] T094 [US4] Enhance chunking strategy in backend/src/services/chunking.py with improved semantic awareness (respect sentence boundaries, 512 token limit, 50 token overlap)
 - [ ] T094a [P] [US4] Create chunking evaluation script in ml/scripts/evaluate_chunking.py to measure 30% reduction in duplicate information per SC-018

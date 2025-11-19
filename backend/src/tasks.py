@@ -134,6 +134,8 @@ def chunk_and_index_document(doc_id, title, content):
             f"🎉 Dual indexing complete for document '{title}': "
             f"{len(qdrant_points)} chunks → Qdrant (vector) + Elasticsearch (keyword)"
         )
+        
+        return {"chunks_created": len(qdrant_points)}
 
     except Exception as e:
         logger.error(f"❌ Error in chunking and indexing document: {e}")
@@ -452,3 +454,277 @@ def rag_qa_task(self, history, question):
     except Exception as e:
         logger.error(f"❌ Error in RAG QA task: {e}", exc_info=True)
         return "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
+
+
+# ============================================================================
+# Dataset Ingestion & Indexing Tasks (T093)
+# ============================================================================
+
+
+@shared_task(bind=True)
+def ingest_dataset_task(
+    self,
+    dataset_name: str,
+    dataset_config: str = None,
+    split: str = "train",
+    doc_type: str = None,
+    max_documents: int = None,
+):
+    """
+    Load a HuggingFace dataset and index all documents to Qdrant + Elasticsearch.
+    
+    Implements:
+    - T093: Dataset ingestion with progress tracking
+    - T099: Progress tracking using task.update_state
+    - T102a: Incremental update logic (hash checking)
+    
+    Args:
+        dataset_name: HuggingFace dataset identifier
+        dataset_config: Dataset configuration name (optional)
+        split: Dataset split to load (default: "train")
+        doc_type: Document type for all documents
+        max_documents: Limit number of documents (for testing)
+    
+    Returns:
+        dict: {
+            "documents_indexed": int,
+            "chunks_indexed": int,
+            "duration_seconds": float,
+        }
+    """
+    import time
+    import hashlib
+    from datasets import load_dataset
+    from .database import SessionLocal
+    from .models import Document, Chunk
+    
+    start_time = time.time()
+    documents_indexed = 0
+    chunks_indexed = 0
+    
+    try:
+        logger.info(f"Starting dataset ingestion: {dataset_name} (split={split})")
+        
+        # Update state to running
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "documents_processed": 0,
+                "total_documents": 0,
+                "chunks_created": 0,
+            },
+        )
+        
+        # Load dataset from HuggingFace
+        logger.info(f"Loading dataset from HuggingFace Hub: {dataset_name}")
+        dataset = load_dataset(dataset_name, dataset_config, split=split)
+        
+        total_docs = len(dataset) if max_documents is None else min(len(dataset), max_documents)
+        logger.info(f"Dataset loaded: {total_docs} documents to process")
+        
+        with SessionLocal() as db:
+            for idx, item in enumerate(dataset):
+                if max_documents and idx >= max_documents:
+                    break
+                
+                # Extract document fields (adapt to dataset structure)
+                # Common field names: title, text, content, question, answer, etc.
+                title = item.get("title") or item.get("question") or f"Document {idx}"
+                content = item.get("text") or item.get("content") or item.get("answer") or ""
+                
+                if not content:
+                    logger.warning(f"Skipping document {idx}: no content found")
+                    continue
+                
+                # Calculate content hash for incremental updates (T102a)
+                content_hash = hashlib.sha256(content.encode()).hexdigest()
+                
+                # Check if document already exists with same hash
+                existing_doc = (
+                    db.query(Document)
+                    .filter(
+                        Document.metadata_["content_hash"].astext == content_hash
+                    )
+                    .first()
+                )
+                
+                if existing_doc:
+                    logger.info(f"Document {idx} already indexed (hash match), skipping")
+                    continue
+                
+                # Create document metadata
+                metadata = {
+                    "source": dataset_name,
+                    "doc_type": doc_type or "medical_qa",
+                    "language": "vi",
+                    "dataset_split": split,
+                    "content_hash": content_hash,
+                    "is_indexed": False,
+                }
+                
+                # Add any additional fields from dataset
+                for key, value in item.items():
+                    if key not in ["title", "text", "content", "question", "answer"]:
+                        metadata[key] = value
+                
+                # Create document in database
+                new_doc = Document(
+                    title=title,
+                    content=content,
+                    metadata_=metadata,
+                )
+                db.add(new_doc)
+                db.commit()
+                db.refresh(new_doc)
+                
+                # Chunk and index document
+                logger.info(f"Chunking and indexing document {idx+1}/{total_docs}: {title[:50]}")
+                chunk_result = chunk_and_index_document(str(new_doc.id), title, content)
+                
+                # Update document as indexed
+                new_doc.metadata_["is_indexed"] = True
+                db.commit()
+                
+                documents_indexed += 1
+                chunks_indexed += chunk_result.get("chunks_created", 0)
+                
+                # Update progress
+                self.update_state(
+                    state="PROGRESS",
+                    meta={
+                        "documents_processed": documents_indexed,
+                        "total_documents": total_docs,
+                        "chunks_created": chunks_indexed,
+                    },
+                )
+                
+                # Log progress every 10 documents
+                if (idx + 1) % 10 == 0:
+                    logger.info(
+                        f"Progress: {documents_indexed}/{total_docs} documents, "
+                        f"{chunks_indexed} chunks created"
+                    )
+        
+        duration = time.time() - start_time
+        
+        logger.info(
+            f"✅ Dataset ingestion completed: {documents_indexed} documents, "
+            f"{chunks_indexed} chunks in {duration:.2f}s"
+        )
+        
+        return {
+            "documents_indexed": documents_indexed,
+            "chunks_indexed": chunks_indexed,
+            "duration_seconds": duration,
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Dataset ingestion failed: {e}", exc_info=True)
+        raise
+
+
+@shared_task(bind=True)
+def reindex_document_task(self, document_id: str):
+    """
+    Reindex a specific document by deleting existing chunks and re-chunking/re-indexing.
+    
+    Implements T092: Reindex endpoint.
+    
+    Args:
+        document_id: Document ID (UUID string)
+    
+    Returns:
+        dict: {
+            "document_id": str,
+            "chunks_created": int,
+            "duration_seconds": float,
+        }
+    """
+    import time
+    from uuid import UUID
+    from .database import SessionLocal
+    from .models import Document, Chunk
+    from .core.vectorize import qdrant_client, settings as vectorize_settings
+    from .services.elasticsearch import es_client, settings as es_settings
+    
+    start_time = time.time()
+    
+    try:
+        doc_uuid = UUID(document_id)
+        
+        logger.info(f"Starting document reindexing: {document_id}")
+        
+        with SessionLocal() as db:
+            # Get document
+            doc = db.query(Document).filter(Document.id == doc_uuid).first()
+            
+            if not doc:
+                raise ValueError(f"Document not found: {document_id}")
+            
+            # Get existing chunks
+            existing_chunks = db.query(Chunk).filter(Chunk.documentId == doc_uuid).all()
+            chunk_ids = [str(chunk.id) for chunk in existing_chunks]
+            
+            logger.info(f"Found {len(chunk_ids)} existing chunks to delete")
+            
+            # Delete from Qdrant
+            if chunk_ids:
+                try:
+                    qdrant_client.delete(
+                        collection_name=vectorize_settings.qdrant_collection_name,
+                        points_selector=chunk_ids,
+                    )
+                    logger.info(f"Deleted {len(chunk_ids)} chunks from Qdrant")
+                except Exception as e:
+                    logger.warning(f"Failed to delete from Qdrant: {e}")
+            
+            # Delete from Elasticsearch
+            if chunk_ids:
+                try:
+                    for chunk_id in chunk_ids:
+                        try:
+                            es_client.delete(
+                                index=es_settings.elasticsearch_index,
+                                id=chunk_id,
+                                ignore=[404],
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to delete chunk {chunk_id}: {e}")
+                    logger.info(f"Deleted {len(chunk_ids)} chunks from Elasticsearch")
+                except Exception as e:
+                    logger.warning(f"Failed to delete from Elasticsearch: {e}")
+            
+            # Delete chunks from database
+            for chunk in existing_chunks:
+                db.delete(chunk)
+            db.commit()
+            
+            logger.info("Deleted existing chunks from database")
+            
+            # Re-chunk and re-index
+            chunk_result = chunk_and_index_document(
+                str(doc.id), doc.title, doc.content
+            )
+            
+            # Update document as indexed
+            if doc.metadata_ is None:
+                doc.metadata_ = {}
+            doc.metadata_["is_indexed"] = True
+            db.commit()
+        
+        duration = time.time() - start_time
+        
+        logger.info(
+            f"✅ Document reindexing completed: {document_id}, "
+            f"{chunk_result.get('chunks_created', 0)} chunks in {duration:.2f}s"
+        )
+        
+        return {
+            "document_id": document_id,
+            "chunks_created": chunk_result.get("chunks_created", 0),
+            "duration_seconds": duration,
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Document reindexing failed: {e}", exc_info=True)
+        raise
