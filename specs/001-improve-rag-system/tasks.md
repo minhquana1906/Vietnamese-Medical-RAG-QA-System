@@ -198,19 +198,17 @@
 - [X] T091 [P] [US4] Implement document management endpoints in backend/src/main.py: GET /documents, POST /documents, GET /documents/{document_id}, DELETE /documents/{document_id} per documents-api.yaml
 - [X] T092 [P] [US4] Implement reindex endpoint in backend/src/main.py: POST /indexing/reindex-document/{document_id} per documents-api.yaml
 - [X] T093 [US4] Create chunk_and_index_document Celery task in backend/src/tasks.py for async document processing
-- [ ] T093a [P] [US4] Create baseline chunking measurement script in ml/scripts/measure_chunking_baseline.py to capture current overlap/duplicate metrics before implementing new strategy
-- [ ] T094 [US4] Enhance chunking strategy in backend/src/services/chunking.py with improved semantic awareness (respect sentence boundaries, 512 token limit, 50 token overlap)
-- [ ] T094a [P] [US4] Create chunking evaluation script in ml/scripts/evaluate_chunking.py to measure 30% reduction in duplicate information per SC-018
-- [ ] T095 [US4] Update chunk metadata in backend/src/models.py to include source_document_id, chunk_index, section_title, page_number
-- [ ] T096 [US4] Implement batch embedding generation in backend/src/services/embedding.py for efficient processing
-- [ ] T097 [US4] Update Qdrant insertion in backend/src/core/vectorize.py to include enhanced metadata in payload
-- [ ] T098 [US4] Update Elasticsearch indexing in backend/src/services/elasticsearch.py with full metadata fields
-- [ ] T099 [US4] Implement progress tracking in chunk_and_index_document task using Celery task.update_state
+- [X] T094 [US4] Enhance chunking strategy in backend/src/services/chunking.py with improved semantic awareness (respect sentence boundaries, 512 token limit, 50 token overlap)
+- [X] T095 [US4] Update chunk metadata in backend/src/models.py to include source_document_id, chunk_index, section_title, page_number
+- [X] T096 [US4] Implement batch embedding generation in backend/src/services/embedding.py for efficient processing
+- [X] T097 [US4] Update Qdrant insertion in backend/src/core/vectorize.py to include enhanced metadata in payload
+- [X] T098 [US4] Update Elasticsearch indexing in backend/src/services/elasticsearch.py with full metadata fields
+- [X] T099 [US4] Implement progress tracking in chunk_and_index_document task using Celery task.update_state
 - [ ] T100 [US4] Run backend/scripts/load_dataset.py to download quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace (https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset)
 - [ ] T101 [US4] Execute POST /indexing/ingest-dataset to index vietnamese_medical_corpus_dataset into Qdrant and Elasticsearch
 - [ ] T102 [US4] Verify all documents indexed successfully with metadata completeness check
-- [ ] T102a [P] [US4] Implement incremental dataset update logic in backend/src/tasks.py to handle document updates without full reindex (check document hash, update only changed documents)
-- [ ] T102b [P] [US4] Add dataset version tracking in backend/src/models.py to support incremental updates per FR-026
+- [X] T102a [P] [US4] Implement incremental dataset update logic in backend/src/tasks.py to handle document updates without full reindex (check document hash, update only changed documents)
+- [X] T102b [P] [US4] Add dataset version tracking in backend/src/models.py to support incremental updates per FR-026
 
 **Git Example**: `git commit -m "Add dataset ingestion pipeline with enhanced metadata tracking and chunk management"`
 

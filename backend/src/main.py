@@ -419,7 +419,7 @@ async def guard_endpoint(request: GuardRequest):
 async def ingest_dataset(request: IngestDatasetRequest):
     """
     Ingest a HuggingFace dataset by loading, chunking, and indexing to Qdrant + Elasticsearch.
-    
+
     Returns a job ID for tracking progress via GET /indexing/jobs/{job_id}.
     """
     try:
@@ -453,7 +453,7 @@ async def ingest_dataset(request: IngestDatasetRequest):
 async def get_indexing_job_status(job_id: str):
     """
     Check the status of a background indexing job.
-    
+
     Returns job status (pending, running, completed, failed) with progress information.
     """
     try:
@@ -463,7 +463,7 @@ async def get_indexing_job_status(job_id: str):
         task_result = AsyncResult(job_id, app=celery_app)
 
         status = task_result.status.lower()
-        
+
         response = IndexingJobStatusResponse(
             job_id=job_id,
             status=status,
@@ -507,11 +507,11 @@ async def list_documents(
     try:
         from sqlalchemy import func
         from .models import Document
-        
+
         with SessionLocal() as db:
             # Build query
             query = db.query(Document)
-            
+
             # Apply filters
             if source:
                 query = query.filter(Document.metadata_["source"].astext == source)
@@ -521,13 +521,18 @@ async def list_documents(
                 query = query.filter(
                     Document.metadata_["is_indexed"].astext == str(is_indexed).lower()
                 )
-            
+
             # Get total count
             total = query.count()
-            
+
             # Apply pagination
-            documents = query.order_by(Document.createdAt.desc()).offset(offset).limit(limit).all()
-            
+            documents = (
+                query.order_by(Document.createdAt.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+
             # Convert to response
             doc_responses = []
             for doc in documents:
@@ -545,7 +550,7 @@ async def list_documents(
                         metadata=metadata,
                     )
                 )
-            
+
             return DocumentListResponse(
                 documents=doc_responses,
                 total=total,
@@ -562,34 +567,36 @@ async def list_documents(
 async def create_document(request: DocumentCreate):
     """
     Manually create a document (not from HuggingFace dataset).
-    
+
     Use POST /indexing/reindex-document/{document_id} to chunk and index this document.
     """
     try:
         from .models import Document
-        
+
         with SessionLocal() as db:
             # Create document
             metadata = request.metadata or {}
-            metadata.update({
-                "source": request.source,
-                "doc_type": request.doc_type,
-                "language": request.language,
-                "is_indexed": False,
-            })
-            
+            metadata.update(
+                {
+                    "source": request.source,
+                    "doc_type": request.doc_type,
+                    "language": request.language,
+                    "is_indexed": False,
+                }
+            )
+
             new_doc = Document(
                 title=request.title,
                 content=request.content,
                 metadata_=metadata,
             )
-            
+
             db.add(new_doc)
             db.commit()
             db.refresh(new_doc)
-            
+
             logger.info(f"Created document: {new_doc.title} (ID: {new_doc.id})")
-            
+
             return DocumentResponse(
                 id=new_doc.id,
                 title=new_doc.title,
@@ -615,18 +622,23 @@ async def get_document(document_id: UUID):
     try:
         from .models import Document, Chunk
         from .schemas.schema import ChunkResponse
-        
+
         with SessionLocal() as db:
             doc = db.query(Document).filter(Document.id == document_id).first()
-            
+
             if not doc:
                 raise HTTPException(status_code=404, detail="Document not found")
-            
+
             metadata = doc.metadata_ or {}
-            
+
             # Get all chunks for this document
-            chunks = db.query(Chunk).filter(Chunk.documentId == document_id).order_by(Chunk.chunkIndex).all()
-            
+            chunks = (
+                db.query(Chunk)
+                .filter(Chunk.documentId == document_id)
+                .order_by(Chunk.chunkIndex)
+                .all()
+            )
+
             chunk_responses = []
             for chunk in chunks:
                 chunk_metadata = chunk.metadata_ or {}
@@ -639,11 +651,13 @@ async def get_document(document_id: UUID):
                         token_count=chunk_metadata.get("token_count"),
                         overlap_start=chunk_metadata.get("overlap_start"),
                         overlap_end=chunk_metadata.get("overlap_end"),
-                        created_at=chunk.createdAt.isoformat() if chunk.createdAt else "",
+                        created_at=(
+                            chunk.createdAt.isoformat() if chunk.createdAt else ""
+                        ),
                         metadata=chunk_metadata,
                     )
                 )
-            
+
             return DocumentDetailResponse(
                 id=doc.id,
                 title=doc.title,
@@ -673,17 +687,17 @@ async def delete_document(document_id: UUID):
         from .models import Document, Chunk
         from .core.vectorize import qdrant_client, settings as vectorize_settings
         from .services.elasticsearch import es_client, settings as es_settings
-        
+
         with SessionLocal() as db:
             doc = db.query(Document).filter(Document.id == document_id).first()
-            
+
             if not doc:
                 raise HTTPException(status_code=404, detail="Document not found")
-            
+
             # Get all chunk IDs
             chunks = db.query(Chunk).filter(Chunk.documentId == document_id).all()
             chunk_ids = [str(chunk.id) for chunk in chunks]
-            
+
             # Delete from Qdrant
             if chunk_ids:
                 try:
@@ -694,7 +708,7 @@ async def delete_document(document_id: UUID):
                     logger.info(f"Deleted {len(chunk_ids)} chunks from Qdrant")
                 except Exception as e:
                     logger.warning(f"Failed to delete from Qdrant: {e}")
-            
+
             # Delete from Elasticsearch
             if chunk_ids:
                 try:
@@ -706,17 +720,19 @@ async def delete_document(document_id: UUID):
                                 ignore=[404],
                             )
                         except Exception as e:
-                            logger.warning(f"Failed to delete chunk {chunk_id} from Elasticsearch: {e}")
+                            logger.warning(
+                                f"Failed to delete chunk {chunk_id} from Elasticsearch: {e}"
+                            )
                     logger.info(f"Deleted {len(chunk_ids)} chunks from Elasticsearch")
                 except Exception as e:
                     logger.warning(f"Failed to delete from Elasticsearch: {e}")
-            
+
             # Delete from PostgreSQL (cascades to chunks)
             db.delete(doc)
             db.commit()
-            
+
             logger.info(f"Deleted document {document_id} with {len(chunk_ids)} chunks")
-            
+
             return None
 
     except HTTPException:
@@ -726,28 +742,30 @@ async def delete_document(document_id: UUID):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/indexing/reindex-document/{document_id}", response_model=ReindexDocumentResponse)
+@app.post(
+    "/indexing/reindex-document/{document_id}", response_model=ReindexDocumentResponse
+)
 async def reindex_document(document_id: UUID):
     """
     Reindex a specific document by deleting existing chunks and re-chunking/re-indexing.
-    
+
     Returns a job ID for tracking progress via GET /indexing/jobs/{job_id}.
     """
     try:
         from .models import Document
         from .tasks import reindex_document_task
-        
+
         with SessionLocal() as db:
             doc = db.query(Document).filter(Document.id == document_id).first()
-            
+
             if not doc:
                 raise HTTPException(status_code=404, detail="Document not found")
-        
+
         # Start async reindexing task
         task = reindex_document_task.delay(str(document_id))
-        
+
         logger.info(f"Document reindexing started: {document_id} (job_id: {task.id})")
-        
+
         return ReindexDocumentResponse(
             job_id=task.id,
             status="pending",
