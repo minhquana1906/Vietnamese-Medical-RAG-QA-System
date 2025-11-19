@@ -25,5 +25,9 @@ models:
 
 # Model serving endpoints
 serving:
-  vllm_url: "http://vllm:8000"  
+  # vllm_url: "http://vllm:8000"  
+  # vllm_api_key: "vllm"
+  vllm_url: "http://171.248.248.17:47311"  
+  vllm_api_key: "1a9793879f4ca1f83642194bf3169d068d9f91c8f4791eaad5f0397554f43674"
   local_models: true  
+  

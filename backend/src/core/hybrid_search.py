@@ -55,12 +55,43 @@ def hybrid_search(
     rrf_k: int = 60,
     use_cache: bool = True,
 ) -> List[Dict[str, Any]]:
+    """
+    Perform hybrid search combining vector and keyword search with RRF fusion.
+
+    Args:
+        query: Search query
+        vector_search_fn: Function to perform vector search
+        keyword_search_fn: Function to perform keyword search
+        top_k: Number of results to return
+        rrf_k: RRF parameter (default: 60)
+        use_cache: Whether to use cache
+
+    Returns:
+        List of fused search results
+    """
+    import time
+
+    start_time = time.time()
+
     # Check cache first
     if use_cache:
         from ..core.cache import cache_search_results, get_search_results
 
         cached_results = get_search_results(query, search_type="hybrid")
         if cached_results:
+            # Increment metrics for hybrid search (cache hit)
+            try:
+                from ..main import (
+                    rag_search_requests_total,
+                    rag_search_duration_seconds,
+                )
+
+                rag_search_requests_total.labels(search_type="hybrid").inc()
+                rag_search_duration_seconds.labels(search_type="hybrid").observe(
+                    time.time() - start_time
+                )
+            except ImportError:
+                pass  # Metrics not available
             return cached_results[:top_k]
 
     # Perform vector search
@@ -91,6 +122,17 @@ def hybrid_search(
         from ..core.cache import cache_search_results
 
         cache_search_results(query, final_results, search_type="hybrid")
+
+    # Increment metrics for hybrid search
+    try:
+        from ..main import rag_search_requests_total, rag_search_duration_seconds
+
+        rag_search_requests_total.labels(search_type="hybrid").inc()
+        rag_search_duration_seconds.labels(search_type="hybrid").observe(
+            time.time() - start_time
+        )
+    except ImportError:
+        pass  # Metrics not available
 
     logger.info(
         f"Hybrid search returned {len(final_results)} results (vector: {len(vector_results)}, keyword: {len(keyword_results)})"

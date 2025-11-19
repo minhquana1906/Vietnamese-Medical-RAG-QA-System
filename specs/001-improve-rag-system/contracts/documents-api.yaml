@@ -47,7 +47,7 @@ paths:
           schema:
             type: string
           description: Filter by source dataset
-          example: "combined_medical_dataset"
+          example: "vietnamese_medical_corpus_dataset"
         - name: doc_type
           in: query
           schema:
@@ -226,7 +226,7 @@ paths:
                 dataset_name:
                   type: string
                   description: HuggingFace dataset identifier
-                  example: "hieunguyenminh416/combined_medical_dataset"
+                  example: "quannguyen204/vietnamese_medical_corpus_dataset"
                 dataset_config:
                   type: string
                   nullable: true
@@ -398,7 +398,7 @@ components:
           example: "Paracetamol là thuốc giảm đau, hạ sốt..."
         source:
           type: string
-          example: "combined_medical_dataset"
+          example: "vietnamese_medical_corpus_dataset"
         doc_type:
           type: string
           enum: [clinical_guideline, drug_info, medical_qa, research_paper, other]

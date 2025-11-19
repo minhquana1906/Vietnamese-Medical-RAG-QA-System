@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Load Vietnamese Medical Datasets from HuggingFace Hub
+Load Vietnamese Medical Dataset from HuggingFace Hub
 
 Downloads and prepares:
-1. quannguyen204/combined_medical_dataset - Medical QA dataset for generation fine-tuning
-2. mtue29/vietnamese-medical-dataset - Medical documents for embedding fine-tuning
+- quannguyen204/vietnamese_medical_corpus_dataset - Comprehensive Vietnamese medical corpus for RAG indexing
+
+Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
 
 Usage:
-    python -m backend.scripts.load_dataset --dataset quannguyen204/combined_medical_dataset --output-dir ./data
-    python -m backend.scripts.load_dataset --dataset mtue29/vietnamese-medical-dataset --output-dir ./data
-    python -m backend.scripts.load_dataset --all --output-dir ./data
+    python -m backend.scripts.load_dataset --output-dir ./data
+    python -m backend.scripts.load_dataset --output-dir ./data --cache-dir /custom/cache
 """
 
 import argparse
@@ -24,127 +24,95 @@ from loguru import logger
 logging.basicConfig(level=logging.INFO)
 
 
-def load_medical_qa_dataset(output_dir: Path, cache_dir: Optional[Path] = None) -> None:
+def load_vietnamese_medical_corpus(
+    output_dir: Path, cache_dir: Optional[Path] = None
+) -> None:
     """
-    Load quannguyen204/combined_medical_dataset from HuggingFace Hub.
+    Load quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub.
 
-    This dataset contains Vietnamese medical question-answer pairs
-    for fine-tuning the generation model (Qwen3-4B-Instruct-2507).
+    This dataset contains comprehensive Vietnamese medical documents for RAG indexing,
+    including medical articles, clinical guidelines, drug information, and health resources.
+
+    Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
 
     Args:
         output_dir: Directory to save the dataset
         cache_dir: Optional cache directory for HuggingFace datasets
     """
     logger.info(
-        "Loading quannguyen204/combined_medical_dataset from HuggingFace Hub..."
+        "Loading quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub..."
     )
 
     try:
-        # Load dataset from HuggingFace
-        # Note: Update with actual HuggingFace dataset path when available
+        # Load dataset from HuggingFace Hub
         dataset = load_dataset(
-            "quannguyen204/combined_medical_dataset",  # Placeholder - update with actual path
+            "quannguyen204/vietnamese_medical_corpus_dataset",
             cache_dir=str(cache_dir) if cache_dir else None,
         )
 
         # Save to disk
-        dataset_path = output_dir / "combined_medical_qa"
+        dataset_path = output_dir / "vietnamese_medical_corpus"
         dataset_path.mkdir(parents=True, exist_ok=True)
 
         dataset.save_to_disk(str(dataset_path))
 
-        logger.info(f"✓ Successfully loaded quannguyen204/combined_medical_dataset")
+        logger.info(
+            f"✓ Successfully loaded quannguyen204/vietnamese_medical_corpus_dataset"
+        )
         logger.info(f"  Saved to: {dataset_path}")
-        logger.info(f"  Train samples: {len(dataset.get('train', []))}")
-        logger.info(f"  Test samples: {len(dataset.get('test', []))}")
+        logger.info(
+            f"  Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
+        )
+
+        # Log split information
+        for split_name, split_data in dataset.items():
+            logger.info(f"  {split_name.capitalize()} samples: {len(split_data)}")
 
     except Exception as e:
-        logger.error(f"✗ Failed to load quannguyen204/combined_medical_dataset: {e}")
+        logger.error(
+            f"✗ Failed to load quannguyen204/vietnamese_medical_corpus_dataset: {e}"
+        )
         logger.info(
             "Note: If dataset is not available on HuggingFace Hub, you may need to:"
         )
-        logger.info("  1. Upload your dataset to HuggingFace Hub")
-        logger.info("  2. Update the dataset path in this script")
-        logger.info("  3. Set HF_TOKEN environment variable if dataset is private")
-        raise
-
-
-def load_vietnamese_medical_dataset(
-    output_dir: Path, cache_dir: Optional[Path] = None
-) -> None:
-    """
-    Load mtue29/vietnamese-medical-dataset from HuggingFace Hub.
-
-    This dataset contains Vietnamese medical documents/articles
-    for fine-tuning the embedding model (Qwen3-Embedding-0.6B).
-
-    Args:
-        output_dir: Directory to save the dataset
-        cache_dir: Optional cache directory for HuggingFace datasets
-    """
-    logger.info("Loading mtue29/vietnamese-medical-dataset from HuggingFace Hub...")
-
-    try:
-        # Load dataset from HuggingFace
-        # Note: Update with actual HuggingFace dataset path when available
-        dataset = load_dataset(
-            "mtue29/vietnamese-medical-dataset",  # Placeholder - update with actual path
-            cache_dir=str(cache_dir) if cache_dir else None,
-        )
-
-        # Save to disk
-        dataset_path = output_dir / "vietnamese_medical"
-        dataset_path.mkdir(parents=True, exist_ok=True)
-
-        dataset.save_to_disk(str(dataset_path))
-
-        logger.info(f"✓ Successfully loaded mtue29/vietnamese-medical-dataset")
-        logger.info(f"  Saved to: {dataset_path}")
-        logger.info(f"  Total documents: {len(dataset.get('train', []))}")
-
-    except Exception as e:
-        logger.error(f"✗ Failed to load mtue29/vietnamese-medical-dataset: {e}")
         logger.info(
-            "Note: If dataset is not available on HuggingFace Hub, you may need to:"
+            "  1. Check dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
         )
-        logger.info("  1. Upload your dataset to HuggingFace Hub")
-        logger.info("  2. Update the dataset path in this script")
-        logger.info("  3. Set HF_TOKEN environment variable if dataset is private")
+        logger.info("  2. Set HF_TOKEN environment variable if dataset is private")
+        logger.info(
+            "  3. Verify your HuggingFace authentication: huggingface-cli login"
+        )
         raise
 
 
 def main():
     """Main entry point for dataset loading."""
     parser = argparse.ArgumentParser(
-        description="Load Vietnamese medical datasets from HuggingFace Hub",
+        description="Load Vietnamese Medical Corpus Dataset from HuggingFace Hub",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Load medical QA dataset
-    python -m backend.scripts.load_dataset --dataset quannguyen204/combined_medical_dataset
-
-    # Load medical documents dataset
-    python -m backend.scripts.load_dataset --dataset mtue29/vietnamese-medical-dataset
-
-    # Load all datasets
-    python -m backend.scripts.load_dataset --all
+    # Load Vietnamese medical corpus dataset (default)
+    python -m backend.scripts.load_dataset
 
     # Specify custom output directory
-    python -m backend.scripts.load_dataset --all --output-dir /path/to/data
+    python -m backend.scripts.load_dataset --output-dir /path/to/data
+
+    # Specify custom cache directory
+    python -m backend.scripts.load_dataset --cache-dir /path/to/cache
+
+Dataset Information:
+    - Name: quannguyen204/vietnamese_medical_corpus_dataset
+    - URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
+    - Content: Comprehensive Vietnamese medical documents for RAG indexing
         """,
     )
-
-    parser.add_argument(
-        "--dataset", type=str, choices=["qa", "embedding"], help="Which dataset to load"
-    )
-
-    parser.add_argument("--all", action="store_true", help="Load all datasets")
 
     parser.add_argument(
         "--output-dir",
         type=str,
         default="./data",
-        help="Directory to save datasets (default: ./data)",
+        help="Directory to save dataset (default: ./data)",
     )
 
     parser.add_argument(
@@ -156,42 +124,43 @@ Examples:
 
     args = parser.parse_args()
 
-    # Validate arguments
-    if not args.all and not args.dataset:
-        parser.error("Either --dataset or --all must be specified")
-
     # Setup paths
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cache_dir = Path(args.cache_dir).resolve() if args.cache_dir else None
 
-    logger.info("=" * 70)
-    logger.info("Vietnamese Medical Dataset Loader")
-    logger.info("=" * 70)
+    logger.info("=" * 80)
+    logger.info("Vietnamese Medical Corpus Dataset Loader")
+    logger.info("=" * 80)
+    logger.info(f"Dataset: quannguyen204/vietnamese_medical_corpus_dataset")
+    logger.info(
+        f"URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
+    )
     logger.info(f"Output directory: {output_dir}")
     if cache_dir:
         logger.info(f"Cache directory: {cache_dir}")
     logger.info("")
 
-    # Load datasets
+    # Load dataset
     try:
-        if args.all or args.dataset == "qa":
-            load_medical_qa_dataset(output_dir, cache_dir)
-            logger.info("")
+        load_vietnamese_medical_corpus(output_dir, cache_dir)
 
-        if args.all or args.dataset == "embedding":
-            load_vietnamese_medical_dataset(output_dir, cache_dir)
-            logger.info("")
-
-        logger.info("=" * 70)
-        logger.info("✓ All datasets loaded successfully!")
-        logger.info("=" * 70)
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("✓ Dataset loaded successfully!")
+        logger.info("=" * 80)
+        logger.info("")
+        logger.info("Next steps:")
+        logger.info("  1. Index dataset via API: POST /indexing/ingest-dataset")
+        logger.info(
+            "  2. Or run indexing script: python -m backend.scripts.index_dataset"
+        )
 
     except Exception as e:
-        logger.error("=" * 70)
+        logger.error("=" * 80)
         logger.error(f"✗ Dataset loading failed: {e}")
-        logger.error("=" * 70)
+        logger.error("=" * 80)
         return 1
 
     return 0

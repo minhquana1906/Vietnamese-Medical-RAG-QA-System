@@ -3,12 +3,7 @@ from typing import Optional
 import yaml
 from loguru import logger
 
-# Path to models config file
-# In Docker: /app/backend/config/models.yaml
-# In dev: backend/config/models.yaml
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "models.yaml"
-
-print(f"Using model config path: {CONFIG_PATH}")
+CONFIG_PATH = Path(__file__).parent.parent.parent / "src" / "configs" / "models.yaml"
 
 # Cached config (loaded once at startup)
 _config_cache: Optional[dict] = None
@@ -53,12 +48,6 @@ def get_embedding_model() -> str:
     return config["models"]["embedding"]["active"]
 
 
-def get_embedding_triton_name() -> str:
-    """Get Triton model name for embedding."""
-    config = load_model_config()
-    return config["models"]["embedding"]["triton_model_name"]
-
-
 def get_embedding_fallback() -> str:
     """Get fallback embedding model."""
     config = load_model_config()
@@ -69,12 +58,6 @@ def get_reranking_model() -> str:
     """Get active reranking model HuggingFace repo ID."""
     config = load_model_config()
     return config["models"]["reranking"]["active"]
-
-
-def get_reranking_triton_name() -> str:
-    """Get Triton model name for reranking."""
-    config = load_model_config()
-    return config["models"]["reranking"]["triton_model_name"]
 
 
 def get_reranking_fallback() -> str:
@@ -89,12 +72,6 @@ def get_guardrails_model() -> str:
     return config["models"]["guardrails"]["active"]
 
 
-def get_guardrails_triton_name() -> str:
-    """Get Triton model name for guardrails."""
-    config = load_model_config()
-    return config["models"]["guardrails"]["triton_model_name"]
-
-
 def get_guardrails_threshold() -> float:
     """Get safety threshold for guardrails."""
     config = load_model_config()
@@ -107,16 +84,10 @@ def get_vllm_url() -> str:
     return config["serving"]["vllm_url"]
 
 
-def get_triton_http_url() -> str:
-    """Get Triton HTTP URL."""
+def get_vllm_api_key() -> str:
+    """Get vLLM API key."""
     config = load_model_config()
-    return config["serving"]["triton_http_url"]
-
-
-def get_triton_grpc_url() -> str:
-    """Get Triton gRPC URL."""
-    config = load_model_config()
-    return config["serving"]["triton_grpc_url"]
+    return config["serving"].get("vllm_api_key", "")
 
 
 def reload_config():

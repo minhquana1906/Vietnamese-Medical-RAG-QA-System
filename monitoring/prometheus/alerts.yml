@@ -34,7 +34,7 @@ groups:
 
       # Model serving down
       - alert: ModelServingDown
-        expr: up{job=~"vllm|triton"} == 0
+        expr: up{job=~"vllm"} == 0
         for: 1m
         labels:
           severity: critical

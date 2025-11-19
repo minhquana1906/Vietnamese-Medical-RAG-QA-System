@@ -3,7 +3,6 @@
     "title": "Model Serving Metrics",
     "tags": [
       "vllm",
-      "triton",
       "models"
     ],
     "timezone": "browser",

@@ -1,108 +1,46 @@
-import json
-
-from llama_index.core.node_parser import (SentenceSplitter,
-                                          SentenceWindowNodeParser)
-from llama_index.core.schema import Document, TextNode
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.schema import Document
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
-from .brain import openai_chat_complete
 
 settings = get_backend_settings()
 
 
-def chunk_by_window_sentences(
-    text,
-    metadata=None,
-    chunk_size=settings.chunk_size,
-    chunk_overlap=settings.chunk_overlap,
+def fixed_semantic_chunking(
+    text: str,
+    metadata: dict = None,
+    chunk_size: int = settings.chunk_size,
+    chunk_overlap: int = settings.chunk_overlap,
 ):
-    logger.info("Chunking document by window sentences...")
+    logger.info(
+        f"Chunking document with fixed semantic strategy (size={chunk_size}, overlap={chunk_overlap})..."
+    )
+
     try:
+        # Create document with metadata
         if metadata is not None:
             document = Document(text=text, metadata=metadata)
         else:
             document = Document(text=text)
 
+        # Use SentenceSplitter with sentence boundary awareness
         splitter = SentenceSplitter.from_defaults(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            separator=". ",
-            include_prev_next_rel=True,
+            separator=". ",  # Sentence separator for Vietnamese
+            include_prev_next_rel=True,  # Include chunk relationships
             include_metadata=True,
         )
-        parser = SentenceWindowNodeParser(
-            splitter=splitter,
-            window_size=3,
-            window_metadata_key="window",
-            original_text_metadata_key="original_text",
-            include_prev_next_rel=True,
-            include_metadata=True,
+
+        nodes = splitter.get_nodes_from_documents([document])
+
+        logger.info(
+            f"Document chunked into {len(nodes)} chunks "
+            f"(avg size: {sum(len(n.text) for n in nodes) // len(nodes) if nodes else 0} chars)"
         )
-        nodes = parser.get_nodes_from_documents([document])
-        logger.info(f"Document chunked into {len(nodes)} chunks.")
         return nodes
+
     except Exception as e:
-        logger.error(f"Error chunking document: {e}")
+        logger.error(f"Error in fixed semantic chunking: {e}")
         raise
-
-
-def chunk_by_llm(text, metadata=None):
-    logger.info("Chunking document using LLM...")
-    try:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a text segmentation assistant. "
-                    "Your task is to split the provided text into overlapping chunks. "
-                    "Each chunk must be no longer than 512 characters, and adjacent chunks must overlap by 50 characters. "
-                    "Preserve sentence boundaries when possible, but prioritize respecting the length and overlap rules. "
-                    "Return only a valid JSON array of strings — no explanations, no markdown, no code fences. "
-                    "Each array element should be a single chunk of text."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "Input text:\n"
-                    f"{text}\n\n"
-                    "Expected output format:\n"
-                    '["chunk1", "chunk2", "chunk3", ...]'
-                ),
-            },
-        ]
-
-        llm_response = openai_chat_complete(messages, temperature=0.1, max_tokens=2048)
-        logger.info(f"LLM response for chunking: {llm_response}")
-
-        try:
-            chunks = json.loads(llm_response)
-            if not isinstance(chunks, list):
-                raise ValueError("LLM response is not a valid JSON list.")
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to decode LLM response as JSON: {e}")
-
-        nodes = [
-            TextNode(text=node, metadata=metadata) if metadata else TextNode(text=node)
-            for node in chunks
-        ]
-        logger.info(f"Document chunked into {len(nodes)} chunks by LLM.")
-        return nodes
-    except Exception as e:
-        logger.error(f"Error chunking document with LLM: {e}")
-        raise
-
-
-def dynamic_chunking(text, metadata=None):
-    if len(text) < settings.chunk_size:
-        logger.info("Document is smaller than chunk size, creating single chunk.")
-        return (
-            [TextNode(text=text, metadata=metadata)]
-            if metadata
-            else [TextNode(text=text)]
-        )
-    elif len(text) < settings.chunk_size * 3:
-        return chunk_by_window_sentences(text, metadata)
-    else:
-        return chunk_by_llm(text, metadata)

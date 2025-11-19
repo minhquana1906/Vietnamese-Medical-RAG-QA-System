@@ -182,3 +182,51 @@ def get_cache_stats() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Error getting cache stats: {e}")
         return {"error": str(e)}
+
+
+# ============= GENERIC CACHE FUNCTIONS =============
+
+
+def get_cached_value(key: str) -> Optional[str]:
+    """
+    Get cached value from Redis by key.
+
+    Args:
+        key: Cache key
+
+    Returns:
+        Cached value as string, or None if not found
+    """
+    try:
+        client = get_redis_client()
+        cached = client.get(key)
+        if cached:
+            logger.debug(f"Cache HIT: {key[:50]}...")
+            return cached.decode("utf-8")
+        logger.debug(f"Cache MISS: {key[:50]}...")
+        return None
+    except Exception as e:
+        logger.warning(f"Error retrieving from cache: {e}")
+        return None
+
+
+def set_cached_value(key: str, value: str, expiration: int = 3600) -> bool:
+    """
+    Set cached value in Redis.
+
+    Args:
+        key: Cache key
+        value: Value to cache (string)
+        expiration: TTL in seconds (default: 1 hour)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        client = get_redis_client()
+        client.setex(key, expiration, value)
+        logger.debug(f"Cached value: {key[:50]}... (TTL: {expiration}s)")
+        return True
+    except Exception as e:
+        logger.warning(f"Error caching value: {e}")
+        return False

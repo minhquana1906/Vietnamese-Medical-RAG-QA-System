@@ -179,7 +179,7 @@ The system undergoes stress testing and load testing to validate performance cha
 
 **Dataset Loading & Indexing:**
 
-- **FR-022**: System MUST load combined_medical_dataset from HuggingFace into the vector database
+- **FR-022**: System MUST load vietnamese_medical_corpus_dataset (quannguyen204/vietnamese_medical_corpus_dataset) from HuggingFace into the vector database
 - **FR-023**: System MUST improve metadata fields for indexed chunks (source tracking, categories, document structure)
 - **FR-024**: System MUST improve chunk ID generation and storage for efficient retrieval and updates
 - **FR-025**: System MUST embed documents using fine-tuned Qwen3-Embedding-0.6B model

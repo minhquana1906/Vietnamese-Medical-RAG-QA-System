@@ -11,26 +11,31 @@ from ..core.model_config import (
     get_generation_model,
     get_generation_fallback,
     get_vllm_url,
+    get_vllm_api_key,
 )
 
 settings = get_backend_settings()
 
 
-def get_remote_vllm_client():
+def get_vllm_client():
     """
     Get remote vLLM client from config.
     Generation model is served on remote server (not local).
+
+    Note: Timeout calculation:
+    - max_tokens=4096 @ 26 tokens/s = ~160 seconds generation
+    - Input processing: ~10 seconds
+    - Safety margin: +30 seconds
+    - Total: 200 seconds minimum
     """
     try:
         vllm_url = get_vllm_url()
-
-        # Get API key from environment (vLLM authentication)
-        vllm_api_key = os.getenv("VLLM_API_KEY", "EMPTY")
+        vllm_api_key = get_vllm_api_key()
 
         client = OpenAI(
             api_key=vllm_api_key,
             base_url=f"{vllm_url}/v1",
-            timeout=30.0,
+            timeout=200.0,
         )
         logger.debug(f"Initialized remote vLLM client at {vllm_url}")
         return client
@@ -54,7 +59,7 @@ def qwen3_chat_complete(
     - TopP: 0.8
     - TopK: 20
     - MinP: 0
-    - Max Tokens: 4096 (for most queries)
+    - Max Tokens: 1024 (sufficient for medical responses, reduces timeout risk)
 
     Reference: https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
 
@@ -62,12 +67,16 @@ def qwen3_chat_complete(
         messages: Chat messages in OpenAI format
         model: Model name (if None, uses config)
         temperature: Sampling temperature (default: 0.7)
-        max_tokens: Max tokens to generate (default: 4096 for Qwen3)
+        max_tokens: Max tokens to generate (default: 1024, medical responses typically 500-800 tokens)
         use_fallback: Enable OpenAI fallback if remote vLLM fails
+
+    Note: Reduced max_tokens from 4096 → 1024 to prevent timeouts:
+    - 1024 tokens @ 26 tokens/s = ~40s generation (safe)
+    - 4096 tokens @ 26 tokens/s = ~160s generation (risky, causes retries)
     """
     # Use Qwen3 recommended parameters
     temperature = temperature if temperature is not None else 0.7
-    max_tokens = max_tokens if max_tokens is not None else 4096  # Qwen3 recommendation
+    max_tokens = max_tokens if max_tokens is not None else 1024  # Reduced from 4096
 
     # Get active model from config if not specified
     if model is None:
@@ -76,7 +85,7 @@ def qwen3_chat_complete(
 
     # Try remote vLLM server first
     try:
-        client = get_remote_vllm_client()
+        client = get_vllm_client()
         if client:
             logger.debug(
                 f"Calling Qwen3-4B via vLLM: temp={temperature}, max_tokens={max_tokens}"
@@ -109,7 +118,7 @@ def qwen3_chat_complete(
     return None
 
 
-def check_remote_vllm_health() -> bool:
+def check_vllm_health() -> bool:
     """Check health of remote vLLM server."""
     try:
         vllm_url = get_vllm_url()
@@ -250,18 +259,19 @@ def detect_route(history, message):
 
 def get_tavily_agent_answer(messages):
     """
-    Generate answer using Tavily web search with context-aware truncation.
-    
+    Generate answer using Tavily web search with intelligent context management.
+
     Args:
         messages: Conversation history
-        
+
     Returns:
         Generated response with citations
-        
-    Note: Truncates conversation history to prevent vLLM context overflow (8192 tokens)
+
+    Note: Automatically summarizes long conversation history to prevent vLLM context overflow
     """
     try:
         from ..functions.web_search import functions_info, tavily_search
+        from .summarizer import summarize_old_messages
 
         logger.info("🔍 Using web search for additional context...")
         client = get_openai_client()
@@ -282,22 +292,19 @@ def get_tavily_agent_answer(messages):
         observation = tavily_search(**args)
         logger.debug(f"Web search returned {len(observation)} chars")
 
-        # IMPORTANT: Limit conversation history to prevent context overflow
-        # vLLM has 8192 token limit, need to leave room for:
-        # - Search results (~600 chars = 150 tokens)
-        # - System prompt (~200 tokens)
-        # - Generation (~4096 tokens)
-        # Total budget for history: ~3000 tokens (~12000 chars)
-        
-        # Keep only last 2 messages from history to stay within budget
-        truncated_messages = messages[-2:] if len(messages) > 2 else messages
-        
-        if len(messages) > 2:
-            logger.debug(f"Truncated conversation history from {len(messages)} to {len(truncated_messages)} messages")
+        # INTELLIGENT CONTEXT MANAGEMENT:
+        # Instead of hard truncation, summarize old messages if conversation is too long
+        # Target budget: ~1500 tokens for history (leaves room for search + generation)
+        # - Search results: ~150 tokens (truncated in web_search.py)
+        # - System prompt: ~200 tokens
+        # - Generation: ~4096 tokens
+        # - History budget: ~1500 tokens (6000 chars)
+
+        optimized_messages = summarize_old_messages(messages, target_tokens=1500)
 
         # Add search results to conversation context
         enhanced_messages = [
-            *truncated_messages,
+            *optimized_messages,
             {"role": "function", "name": "tavily_search", "content": observation},
             {
                 "role": "user",

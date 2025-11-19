@@ -101,21 +101,18 @@ huggingface-cli download Qwen/Qwen3Guard-Gen-0.6B --local-dir models/qwen3/guard
 ### Step 4: Download Datasets from HuggingFace
 
 ```bash
-# Download Vietnamese medical datasets
+# Download Vietnamese medical corpus dataset
+cd backend
+python -m backend.scripts.load_dataset --output-dir ./data
+
+# Or manually with Python:
 python -c "
 from datasets import load_dataset
 
-# Combined medical QA dataset (for fine-tuning generation model)
-dataset = load_dataset('hieunguyenminh416/combined_medical_qa_dataset')
-dataset.save_to_disk('data/combined_medical_qa_dataset')
-
-# Combined medical dataset (for chunking and indexing)
-dataset = load_dataset('hieunguyenminh416/combined_medical_dataset')
-dataset.save_to_disk('data/combined_medical_dataset')
-
-# Vietnamese medical dataset (for fine-tuning embedding model)
-dataset = load_dataset('hieunguyenminh416/vietnamese-medical-dataset')
-dataset.save_to_disk('data/vietnamese-medical-dataset')
+# Vietnamese Medical Corpus Dataset (comprehensive medical documents for RAG indexing)
+# URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
+dataset = load_dataset('quannguyen204/vietnamese_medical_corpus_dataset')
+dataset.save_to_disk('data/vietnamese_medical_corpus')
 "
 ```
 
@@ -244,12 +241,12 @@ Expected output:
 Run the document ingestion task:
 
 ```bash
-# Index combined_medical_dataset
+# Index vietnamese_medical_corpus_dataset
 curl -X POST http://localhost:8000/indexing/ingest-dataset \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "dataset_name": "hieunguyenminh416/combined_medical_dataset",
+    "dataset_name": "quannguyen204/vietnamese_medical_corpus_dataset",
     "doc_type": "medical_qa",
     "max_documents": null
   }'
