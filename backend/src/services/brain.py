@@ -23,8 +23,12 @@ def get_remote_vllm_client():
     """
     try:
         vllm_url = get_vllm_url()
+
+        # Get API key from environment (vLLM authentication)
+        vllm_api_key = os.getenv("VLLM_API_KEY", "EMPTY")
+
         client = OpenAI(
-            api_key=os.getenv("REMOTE_VLLM_API_KEY"),
+            api_key=vllm_api_key,
             base_url=f"{vllm_url}/v1",
             timeout=30.0,
         )
@@ -43,18 +47,27 @@ def qwen3_chat_complete(
     use_fallback: bool = True,
 ) -> Optional[str]:
     """
-    Generate chat completion using remote vLLM server.
-    Generation model is served on external server (config: serving.vllm_url).
+    Generate chat completion using remote vLLM server with Qwen3-4B-Instruct-2507.
+
+    Qwen Team Recommended Parameters:
+    - Temperature: 0.7
+    - TopP: 0.8
+    - TopK: 20
+    - MinP: 0
+    - Max Tokens: 4096 (for most queries)
+
+    Reference: https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
 
     Args:
         messages: Chat messages in OpenAI format
         model: Model name (if None, uses config)
-        temperature: Sampling temperature
-        max_tokens: Max tokens to generate
+        temperature: Sampling temperature (default: 0.7)
+        max_tokens: Max tokens to generate (default: 4096 for Qwen3)
         use_fallback: Enable OpenAI fallback if remote vLLM fails
     """
-    temperature = temperature if temperature is not None else settings.temperature
-    max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
+    # Use Qwen3 recommended parameters
+    temperature = temperature if temperature is not None else 0.7
+    max_tokens = max_tokens if max_tokens is not None else 4096  # Qwen3 recommendation
 
     # Get active model from config if not specified
     if model is None:
@@ -65,14 +78,22 @@ def qwen3_chat_complete(
     try:
         client = get_remote_vllm_client()
         if client:
+            logger.debug(
+                f"Calling Qwen3-4B via vLLM: temp={temperature}, max_tokens={max_tokens}"
+            )
+
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=0.8,  # Qwen3 recommendation
+                # Note: vLLM may not support top_k and min_p yet
             )
+
             logger.debug(f"✅ Generated with remote vLLM: {model}")
             content: str = response.choices[0].message.content or ""
+            logger.debug(f"Generated {len(content)} chars")
             return content
     except Exception as e:
         logger.warning(f"❌ Remote vLLM failed ({model}): {e}")
@@ -228,6 +249,17 @@ def detect_route(history, message):
 
 
 def get_tavily_agent_answer(messages):
+    """
+    Generate answer using Tavily web search with context-aware truncation.
+    
+    Args:
+        messages: Conversation history
+        
+    Returns:
+        Generated response with citations
+        
+    Note: Truncates conversation history to prevent vLLM context overflow (8192 tokens)
+    """
     try:
         from ..functions.web_search import functions_info, tavily_search
 
@@ -246,13 +278,26 @@ def get_tavily_agent_answer(messages):
         args = json.loads(response.choices[0].message.function_call.arguments)
         logger.debug(f"Search query: {args}")
 
-        # Perform web search
+        # Perform web search (content is truncated in tavily_search function)
         observation = tavily_search(**args)
         logger.debug(f"Web search returned {len(observation)} chars")
 
+        # IMPORTANT: Limit conversation history to prevent context overflow
+        # vLLM has 8192 token limit, need to leave room for:
+        # - Search results (~600 chars = 150 tokens)
+        # - System prompt (~200 tokens)
+        # - Generation (~4096 tokens)
+        # Total budget for history: ~3000 tokens (~12000 chars)
+        
+        # Keep only last 2 messages from history to stay within budget
+        truncated_messages = messages[-2:] if len(messages) > 2 else messages
+        
+        if len(messages) > 2:
+            logger.debug(f"Truncated conversation history from {len(messages)} to {len(truncated_messages)} messages")
+
         # Add search results to conversation context
         enhanced_messages = [
-            *messages,
+            *truncated_messages,
             {"role": "function", "name": "tavily_search", "content": observation},
             {
                 "role": "user",

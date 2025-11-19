@@ -23,6 +23,12 @@ from .schemas.schema import (
     RAGQueryRequest,
     RAGQueryResponse,
     SystemHealthResponse,
+    EmbedRequest,
+    EmbedResponse,
+    RerankRequest,
+    RerankResponse,
+    GuardRequest,
+    GuardResponse,
 )
 from .services.rag_service import handle_rag_query
 from .tasks import chunk_and_index_document
@@ -176,7 +182,48 @@ async def health_check():
         )
 
 
-@app.post("/v1/rag/query", response_model=RAGQueryResponse)
+# Qdrant endpoints
+@app.post("/v1/collections/create")
+def create_collection_endpoint(
+    collection_name: str = settings.default_collection_name,
+    vector_size: int = settings.vector_dimension,
+):
+    try:
+        status = create_collection(collection_name, vector_size)
+        return {"status": status}
+    except Exception as e:
+        logger.error(f"Error creating collection via endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+@app.post("/v1/documents/create")
+def insert_document_endpoint(title: str, content: str):
+    with tracer.start_as_current_span("insert_document") as span:
+        span.set_attribute("document.title", title)
+        start_time = time.time()
+        try:
+            new_docs = insert_document(title, content)
+            doc_id = str(new_docs.id)
+            chunk_and_index_document.delay(doc_id, title, content)
+            document_indexing_total.labels(status="queued").inc()
+            duration = time.time() - start_time
+            document_indexing_duration_seconds.observe(duration)
+            return {
+                "status": "Document received and indexing started.",
+                "document_id": doc_id,
+            }
+        except Exception as e:
+            logger.error(f"Error inserting document via endpoint: {e}")
+            document_indexing_total.labels(status="error").inc()
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e))
+            raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+# ============= Model Inference Endpoints =============
+
+
+@app.post("/v1/models/rag", response_model=RAGQueryResponse)
 async def rag_query(request: RAGQueryRequest):
     logger.info(
         f"RAG query from user={request.user_identifier}, thread={request.thread_id}"
@@ -218,87 +265,9 @@ async def rag_query(request: RAGQueryRequest):
             )
 
 
-# Qdrant endpoints
-@app.post("/v1/collections/create")
-def create_collection_endpoint(
-    collection_name: str = settings.default_collection_name,
-    vector_size: int = settings.vector_dimension,
-):
-    try:
-        status = create_collection(collection_name, vector_size)
-        return {"status": status}
-    except Exception as e:
-        logger.error(f"Error creating collection via endpoint: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-@app.post("/v1/documents/create")
-def insert_document_endpoint(title: str, content: str):
-    with tracer.start_as_current_span("insert_document") as span:
-        span.set_attribute("document.title", title)
-        start_time = time.time()
-        try:
-            new_docs = insert_document(title, content)
-            doc_id = str(new_docs.id)
-            chunk_and_index_document.delay(doc_id, title, content)
-            document_indexing_total.labels(status="queued").inc()
-            duration = time.time() - start_time
-            document_indexing_duration_seconds.observe(duration)
-            return {
-                "status": "Document received and indexing started.",
-                "document_id": doc_id,
-            }
-        except Exception as e:
-            logger.error(f"Error inserting document via endpoint: {e}")
-            document_indexing_total.labels(status="error").inc()
-            span.set_attribute("error", True)
-            span.set_attribute("error.message", str(e))
-            raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-# ============= Model Inference Endpoints =============
-
-from pydantic import BaseModel
-from typing import List, Dict, Any
-
-
-class EmbedRequest(BaseModel):
-    texts: List[str]
-    normalize: bool = True
-
-
-class EmbedResponse(BaseModel):
-    embeddings: List[List[float]]
-    model: str
-
-
-class RerankRequest(BaseModel):
-    query: str
-    documents: List[str]
-    top_n: int = 5
-
-
-class RerankResponse(BaseModel):
-    scores: List[float]
-    indices: List[int]
-    model: str
-
-
-class GuardRequest(BaseModel):
-    text: str
-    check_type: str = "input"
-
-
-class GuardResponse(BaseModel):
-    is_safe: bool
-    safety_score: float
-    category: Optional[str] = None
-    model: str
-
-
 @app.post("/v1/models/embed", response_model=EmbedResponse)
 async def embed_endpoint(request: EmbedRequest):
-    """Generate embeddings for texts"""
+    """Generate Qwen3 embeddings with instruction-awareness"""
     try:
         model_registry = get_model_registry()
 
@@ -306,14 +275,25 @@ async def embed_endpoint(request: EmbedRequest):
             raise HTTPException(status_code=503, detail="Models not loaded")
 
         start_time = time.time()
-        embeddings = model_registry.embed_texts(request.texts, request.normalize)
+
+        # Pass instruction parameters to Qwen3-Embedding
+        embeddings = model_registry.embed_texts(
+            texts=request.texts,
+            normalize=request.normalize,
+            is_query=request.is_query,
+            instruction=request.instruction
+            or "Given a medical query, retrieve relevant passages that answer the query",
+        )
+
         duration = time.time() - start_time
 
         model_inference_duration_seconds.labels(
             model_type="embedding", model_name="qwen3"
         ).observe(duration)
 
-        logger.debug(f"Embedded {len(embeddings)} texts in {duration:.3f}s")
+        logger.debug(
+            f"Embedded {len(embeddings)} texts (is_query={request.is_query}) in {duration:.3f}s"
+        )
 
         from .core.model_config import get_embedding_model
 
@@ -326,7 +306,7 @@ async def embed_endpoint(request: EmbedRequest):
 
 @app.post("/v1/models/rerank", response_model=RerankResponse)
 async def rerank_endpoint(request: RerankRequest):
-    """Rerank documents by relevance"""
+    """Rerank documents using Qwen3-Reranker with task instruction"""
     try:
         model_registry = get_model_registry()
 
@@ -334,9 +314,16 @@ async def rerank_endpoint(request: RerankRequest):
             raise HTTPException(status_code=503, detail="Models not loaded")
 
         start_time = time.time()
+
+        # Pass instruction to Qwen3-Reranker
         scores, indices = model_registry.rerank_documents(
-            request.query, request.documents, request.top_n
+            query=request.query,
+            documents=request.documents,
+            top_n=request.top_n,
+            instruction=request.instruction
+            or "Given a medical query, determine if the passage contains the answer",
         )
+
         duration = time.time() - start_time
 
         model_inference_duration_seconds.labels(
@@ -358,7 +345,7 @@ async def rerank_endpoint(request: RerankRequest):
 
 @app.post("/v1/models/guard", response_model=GuardResponse)
 async def guard_endpoint(request: GuardRequest):
-    """Check content safety"""
+    """Check content safety using Qwen3Guard with 3-tier severity"""
     try:
         model_registry = get_model_registry()
 
@@ -366,9 +353,15 @@ async def guard_endpoint(request: GuardRequest):
             raise HTTPException(status_code=503, detail="Models not loaded")
 
         start_time = time.time()
-        is_safe, safety_score, category = model_registry.check_safety(
-            request.text, request.check_type
+
+        # Qwen3Guard returns: (is_safe, severity, categories, is_refusal, raw_output)
+        is_safe, severity, categories, is_refusal, raw_output = (
+            model_registry.check_safety(
+                text=request.text,
+                check_type=request.check_type,
+            )
         )
+
         duration = time.time() - start_time
 
         model_inference_duration_seconds.labels(
@@ -376,15 +369,17 @@ async def guard_endpoint(request: GuardRequest):
         ).observe(duration)
 
         logger.debug(
-            f"Guard check in {duration:.3f}s: is_safe={is_safe}, score={safety_score:.3f}"
+            f"Guard check in {duration:.3f}s: severity={severity}, categories={categories}, refusal={is_refusal}"
         )
 
         from .core.model_config import get_guardrails_model
 
         return GuardResponse(
             is_safe=is_safe,
-            safety_score=safety_score,
-            category=category,
+            severity=severity,
+            categories=categories,
+            is_refusal=is_refusal,
+            raw_output=raw_output,
             model=get_guardrails_model(),
         )
 

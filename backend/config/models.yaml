@@ -25,9 +25,5 @@ models:
 
 # Model serving endpoints
 serving:
-  vllm_url: "http://112.84.166.37:20362"  # Remote vLLM for generation
-  local_models: true  # Serve embedding/reranking/guardrails locally
-
-# Notes:
-# - To deploy a fine-tuned model, update the 'active' field with HuggingFace repo ID
-# - Example: active: "hieunguyenminh416/qwen3-medical-v1"
+  vllm_url: "http://vllm:8000"  
+  local_models: true  
