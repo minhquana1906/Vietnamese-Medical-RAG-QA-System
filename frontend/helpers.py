@@ -5,12 +5,16 @@ import time
 import chainlit as cl
 import httpx
 from loguru import logger
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # Backend API configuration
 BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://chatbot_api:8000")
-RAG_QUERY_ENDPOINT = f"{BACKEND_API_URL}/v1/rag/query"
+RAG_QUERY_ENDPOINT = f"{BACKEND_API_URL}/v1/models/rag"
 DATABASE_URL = (
     "postgresql+asyncpg://postgresadmin:postgresadmin@postgres_db:5432/medical_rag_db"
 )
