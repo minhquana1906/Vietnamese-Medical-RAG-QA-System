@@ -26,22 +26,36 @@ celery_app.autodiscover_tasks()
 
 
 @shared_task
-def chunk_and_index_document(doc_id, title, content):
+def chunk_and_index_document(doc_id, title, content, metadata=None):
     """
     Chunk document and index to both Qdrant (vector) and Elasticsearch (keyword).
 
     This implements dual indexing strategy (T088) for hybrid search:
     1. Chunk document using fixed semantic strategy
     2. Generate embeddings for each chunk
-    3. Index to Qdrant (vector search)
-    4. Index to Elasticsearch (keyword search)
+    3. Store chunks in PostgreSQL with enhanced metadata (T095)
+    4. Index to Qdrant (vector search) with metadata (T097)
+    5. Index to Elasticsearch (keyword search) with metadata (T098)
 
     Args:
         doc_id: Document ID
         title: Document title
         content: Document content
+        metadata: Document metadata dict with keys:
+            - source: Dataset source
+            - doc_type: Document type (clinical_guideline, drug_info, medical_qa, etc.)
+            - language: Language code (default: vi)
+            - section_title: Section title (optional)
+            - page_number: Page number (optional)
+            - any other custom fields
     """
     try:
+        from uuid import UUID
+        from .database import SessionLocal
+        from .models import Chunk
+
+        metadata = metadata or {}
+        
         # Chunk the document using fixed semantic strategy (T087)
         nodes = fixed_semantic_chunking(
             text=content, metadata={"doc_id": doc_id, "title": title}
@@ -59,6 +73,14 @@ def chunk_and_index_document(doc_id, title, content):
         # Generate embeddings and prepare points for dual indexing
         qdrant_points = []
         elasticsearch_docs = []
+        db_chunks = []  # Store chunks in database (T095)
+
+        # Extract metadata fields (T095)
+        doc_source = metadata.get("source", "")
+        doc_type = metadata.get("doc_type", "medical_qa")
+        language = metadata.get("language", "vi")
+        section_title = metadata.get("section_title")
+        page_number = metadata.get("page_number")
 
         for chunk_index, node in enumerate(nodes):
             # Use Qwen3 embedding service for documents (NO instruction prefix)
@@ -71,24 +93,44 @@ def chunk_and_index_document(doc_id, title, content):
 
             # Generate unique chunk ID
             chunk_id = str(uuid.uuid4())
+            
+            # Calculate token count for metadata
+            token_count = len(node.text.split())  # Rough estimate
+            
+            # Prepare enhanced metadata (T095: source_document_id, chunk_index, section_title, page_number)
+            chunk_metadata = {
+                "source_document_id": doc_id,
+                "chunk_index": chunk_index,
+                "title": title,
+                "doc_type": doc_type,
+                "source": doc_source,
+                "language": language,
+                "token_count": token_count,
+            }
+            
+            # Add optional fields if present
+            if section_title:
+                chunk_metadata["section_title"] = section_title
+            if page_number is not None:
+                chunk_metadata["page_number"] = page_number
+            
+            # Add any additional metadata from document
+            for key, value in metadata.items():
+                if key not in ["source", "doc_type", "language", "section_title", "page_number"]:
+                    chunk_metadata[key] = value
 
-            # Prepare Qdrant point (vector search)
+            # Prepare Qdrant point with enhanced metadata (T097)
             qdrant_point = {
                 "id": chunk_id,
                 "embedding": embedding,
                 "metadata": {
-                    "doc_id": doc_id,
-                    "title": title,
                     "content": node.text,
-                    "chunk_index": chunk_index,
-                    "doc_type": "medical_qa",  # Can be parameterized later
-                    "source": "",  # Can be added from metadata
+                    **chunk_metadata,  # Include all enhanced metadata
                 },
             }
             qdrant_points.append(qdrant_point)
 
-            # Prepare Elasticsearch document (keyword search)
-            # Note: Elasticsearch indexing happens separately per document
+            # Prepare Elasticsearch document with enhanced metadata (T098)
             elasticsearch_docs.append(
                 {
                     "chunk_id": chunk_id,
@@ -96,19 +138,41 @@ def chunk_and_index_document(doc_id, title, content):
                     "chunk_index": chunk_index,
                     "content": node.text,
                     "title": title,
+                    "doc_type": doc_type,
+                    "source": doc_source,
+                    "language": language,
+                    "metadata": chunk_metadata,
                 }
             )
+            
+            # Prepare database chunk (T095)
+            db_chunks.append({
+                "id": UUID(chunk_id),
+                "documentId": UUID(doc_id),
+                "chunkIndex": chunk_index,
+                "content": node.text,
+                "metadata_": chunk_metadata,
+            })
 
-        # Index to Qdrant (vector database)
+        # Store chunks in database (T095)
+        if db_chunks:
+            with SessionLocal() as db:
+                for chunk_data in db_chunks:
+                    chunk = Chunk(**chunk_data)
+                    db.add(chunk)
+                db.commit()
+            logger.info(f"✅ Stored {len(db_chunks)} chunks in PostgreSQL")
+
+        # Index to Qdrant (vector database) with enhanced metadata (T097)
         if qdrant_points:
             upsert_points(
                 qdrant_points, collection_name=settings.default_collection_name
             )
-            logger.info(f"✅ Indexed {len(qdrant_points)} chunks to Qdrant")
+            logger.info(f"✅ Indexed {len(qdrant_points)} chunks to Qdrant with enhanced metadata")
         else:
             logger.warning(f"⚠️ No embeddings generated for document '{title}'")
 
-        # Index to Elasticsearch (keyword search)
+        # Index to Elasticsearch (keyword search) with enhanced metadata (T098)
         if elasticsearch_docs:
             indexed_count = 0
             for es_doc in elasticsearch_docs:
@@ -118,23 +182,23 @@ def chunk_and_index_document(doc_id, title, content):
                     chunk_index=es_doc["chunk_index"],
                     content=es_doc["content"],
                     title=es_doc["title"],
-                    doc_type="medical_qa",
-                    source="",
-                    language="vi",
-                    metadata={"doc_id": doc_id},
+                    doc_type=es_doc["doc_type"],
+                    source=es_doc["source"],
+                    language=es_doc["language"],
+                    metadata=es_doc["metadata"],
                 )
                 if success:
                     indexed_count += 1
 
             logger.info(
-                f"✅ Indexed {indexed_count}/{len(elasticsearch_docs)} chunks to Elasticsearch"
+                f"✅ Indexed {indexed_count}/{len(elasticsearch_docs)} chunks to Elasticsearch with enhanced metadata"
             )
 
         logger.info(
             f"🎉 Dual indexing complete for document '{title}': "
             f"{len(qdrant_points)} chunks → Qdrant (vector) + Elasticsearch (keyword)"
         )
-        
+
         return {"chunks_created": len(qdrant_points)}
 
     except Exception as e:
@@ -472,19 +536,19 @@ def ingest_dataset_task(
 ):
     """
     Load a HuggingFace dataset and index all documents to Qdrant + Elasticsearch.
-    
+
     Implements:
     - T093: Dataset ingestion with progress tracking
     - T099: Progress tracking using task.update_state
     - T102a: Incremental update logic (hash checking)
-    
+
     Args:
         dataset_name: HuggingFace dataset identifier
         dataset_config: Dataset configuration name (optional)
         split: Dataset split to load (default: "train")
         doc_type: Document type for all documents
         max_documents: Limit number of documents (for testing)
-    
+
     Returns:
         dict: {
             "documents_indexed": int,
@@ -497,14 +561,14 @@ def ingest_dataset_task(
     from datasets import load_dataset
     from .database import SessionLocal
     from .models import Document, Chunk
-    
+
     start_time = time.time()
     documents_indexed = 0
     chunks_indexed = 0
-    
+
     try:
         logger.info(f"Starting dataset ingestion: {dataset_name} (split={split})")
-        
+
         # Update state to running
         self.update_state(
             state="PROGRESS",
@@ -514,45 +578,49 @@ def ingest_dataset_task(
                 "chunks_created": 0,
             },
         )
-        
+
         # Load dataset from HuggingFace
         logger.info(f"Loading dataset from HuggingFace Hub: {dataset_name}")
         dataset = load_dataset(dataset_name, dataset_config, split=split)
-        
-        total_docs = len(dataset) if max_documents is None else min(len(dataset), max_documents)
+
+        total_docs = (
+            len(dataset) if max_documents is None else min(len(dataset), max_documents)
+        )
         logger.info(f"Dataset loaded: {total_docs} documents to process")
-        
+
         with SessionLocal() as db:
             for idx, item in enumerate(dataset):
                 if max_documents and idx >= max_documents:
                     break
-                
+
                 # Extract document fields (adapt to dataset structure)
                 # Common field names: title, text, content, question, answer, etc.
                 title = item.get("title") or item.get("question") or f"Document {idx}"
-                content = item.get("text") or item.get("content") or item.get("answer") or ""
-                
+                content = (
+                    item.get("text") or item.get("content") or item.get("answer") or ""
+                )
+
                 if not content:
                     logger.warning(f"Skipping document {idx}: no content found")
                     continue
-                
+
                 # Calculate content hash for incremental updates (T102a)
                 content_hash = hashlib.sha256(content.encode()).hexdigest()
-                
+
                 # Check if document already exists with same hash
                 existing_doc = (
                     db.query(Document)
-                    .filter(
-                        Document.metadata_["content_hash"].astext == content_hash
-                    )
+                    .filter(Document.metadata_["content_hash"].astext == content_hash)
                     .first()
                 )
-                
+
                 if existing_doc:
-                    logger.info(f"Document {idx} already indexed (hash match), skipping")
+                    logger.info(
+                        f"Document {idx} already indexed (hash match), skipping"
+                    )
                     continue
-                
-                # Create document metadata
+
+                # Create document metadata with version tracking (T102b)
                 metadata = {
                     "source": dataset_name,
                     "doc_type": doc_type or "medical_qa",
@@ -560,13 +628,15 @@ def ingest_dataset_task(
                     "dataset_split": split,
                     "content_hash": content_hash,
                     "is_indexed": False,
+                    "dataset_version": "1.0",  # T102b: Track dataset version for incremental updates
+                    "indexed_at": None,  # Will be set when indexing completes
                 }
-                
+
                 # Add any additional fields from dataset
                 for key, value in item.items():
                     if key not in ["title", "text", "content", "question", "answer"]:
                         metadata[key] = value
-                
+
                 # Create document in database
                 new_doc = Document(
                     title=title,
@@ -576,18 +646,27 @@ def ingest_dataset_task(
                 db.add(new_doc)
                 db.commit()
                 db.refresh(new_doc)
-                
-                # Chunk and index document
-                logger.info(f"Chunking and indexing document {idx+1}/{total_docs}: {title[:50]}")
-                chunk_result = chunk_and_index_document(str(new_doc.id), title, content)
-                
-                # Update document as indexed
+
+                # Chunk and index document with metadata
+                logger.info(
+                    f"Chunking and indexing document {idx+1}/{total_docs}: {title[:50]}"
+                )
+                chunk_result = chunk_and_index_document(
+                    str(new_doc.id), 
+                    title, 
+                    content,
+                    metadata=metadata  # Pass metadata to chunking function
+                )
+
+                # Update document as indexed with timestamp (T102b)
+                from datetime import datetime
                 new_doc.metadata_["is_indexed"] = True
+                new_doc.metadata_["indexed_at"] = datetime.utcnow().isoformat()
                 db.commit()
-                
+
                 documents_indexed += 1
                 chunks_indexed += chunk_result.get("chunks_created", 0)
-                
+
                 # Update progress
                 self.update_state(
                     state="PROGRESS",
@@ -597,27 +676,27 @@ def ingest_dataset_task(
                         "chunks_created": chunks_indexed,
                     },
                 )
-                
+
                 # Log progress every 10 documents
                 if (idx + 1) % 10 == 0:
                     logger.info(
                         f"Progress: {documents_indexed}/{total_docs} documents, "
                         f"{chunks_indexed} chunks created"
                     )
-        
+
         duration = time.time() - start_time
-        
+
         logger.info(
             f"✅ Dataset ingestion completed: {documents_indexed} documents, "
             f"{chunks_indexed} chunks in {duration:.2f}s"
         )
-        
+
         return {
             "documents_indexed": documents_indexed,
             "chunks_indexed": chunks_indexed,
             "duration_seconds": duration,
         }
-    
+
     except Exception as e:
         logger.error(f"❌ Dataset ingestion failed: {e}", exc_info=True)
         raise
@@ -627,12 +706,12 @@ def ingest_dataset_task(
 def reindex_document_task(self, document_id: str):
     """
     Reindex a specific document by deleting existing chunks and re-chunking/re-indexing.
-    
+
     Implements T092: Reindex endpoint.
-    
+
     Args:
         document_id: Document ID (UUID string)
-    
+
     Returns:
         dict: {
             "document_id": str,
@@ -646,27 +725,27 @@ def reindex_document_task(self, document_id: str):
     from .models import Document, Chunk
     from .core.vectorize import qdrant_client, settings as vectorize_settings
     from .services.elasticsearch import es_client, settings as es_settings
-    
+
     start_time = time.time()
-    
+
     try:
         doc_uuid = UUID(document_id)
-        
+
         logger.info(f"Starting document reindexing: {document_id}")
-        
+
         with SessionLocal() as db:
             # Get document
             doc = db.query(Document).filter(Document.id == doc_uuid).first()
-            
+
             if not doc:
                 raise ValueError(f"Document not found: {document_id}")
-            
+
             # Get existing chunks
             existing_chunks = db.query(Chunk).filter(Chunk.documentId == doc_uuid).all()
             chunk_ids = [str(chunk.id) for chunk in existing_chunks]
-            
+
             logger.info(f"Found {len(chunk_ids)} existing chunks to delete")
-            
+
             # Delete from Qdrant
             if chunk_ids:
                 try:
@@ -677,7 +756,7 @@ def reindex_document_task(self, document_id: str):
                     logger.info(f"Deleted {len(chunk_ids)} chunks from Qdrant")
                 except Exception as e:
                     logger.warning(f"Failed to delete from Qdrant: {e}")
-            
+
             # Delete from Elasticsearch
             if chunk_ids:
                 try:
@@ -693,38 +772,42 @@ def reindex_document_task(self, document_id: str):
                     logger.info(f"Deleted {len(chunk_ids)} chunks from Elasticsearch")
                 except Exception as e:
                     logger.warning(f"Failed to delete from Elasticsearch: {e}")
-            
+
             # Delete chunks from database
             for chunk in existing_chunks:
                 db.delete(chunk)
             db.commit()
-            
+
             logger.info("Deleted existing chunks from database")
-            
-            # Re-chunk and re-index
+
+            # Re-chunk and re-index with document metadata
+            doc_metadata = doc.metadata_ or {}
             chunk_result = chunk_and_index_document(
-                str(doc.id), doc.title, doc.content
+                str(doc.id), 
+                doc.title, 
+                doc.content,
+                metadata=doc_metadata  # Pass document metadata
             )
-            
+
             # Update document as indexed
             if doc.metadata_ is None:
                 doc.metadata_ = {}
             doc.metadata_["is_indexed"] = True
             db.commit()
-        
+
         duration = time.time() - start_time
-        
+
         logger.info(
             f"✅ Document reindexing completed: {document_id}, "
             f"{chunk_result.get('chunks_created', 0)} chunks in {duration:.2f}s"
         )
-        
+
         return {
             "document_id": document_id,
             "chunks_created": chunk_result.get("chunks_created", 0),
             "duration_seconds": duration,
         }
-    
+
     except Exception as e:
         logger.error(f"❌ Document reindexing failed: {e}", exc_info=True)
         raise

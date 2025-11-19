@@ -91,7 +91,9 @@ class IngestDatasetRequest(BaseModel):
     """Request to ingest a HuggingFace dataset"""
 
     dataset_name: str = Field(..., description="HuggingFace dataset identifier")
-    dataset_config: Optional[str] = Field(None, description="Dataset configuration name")
+    dataset_config: Optional[str] = Field(
+        None, description="Dataset configuration name"
+    )
     split: str = Field("train", description="Dataset split to load")
     doc_type: Optional[str] = Field(
         None, description="Document type for all documents in dataset"
