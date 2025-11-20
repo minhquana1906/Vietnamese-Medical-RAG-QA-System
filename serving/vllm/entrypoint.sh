@@ -16,15 +16,6 @@ fi
 
 echo "Using uv executable: $UV_CMD"
 
-# Ensure correct transformers for Qwen3
-# echo "Upgrading dependencies..."
-# uv pip install "transformers>=4.57.0" "numpy<=2.0"
-# echo "Dependencies updated successfully."
-
-# echo "Using HuggingFace Cache:"
-# echo " - HF:  /root/.cache/huggingface"
-# echo " - VLLM: /root/.cache/vllm"
-
 # Start vLLM
 echo "Starting vLLM..."
 exec uv run -m vllm.entrypoints.openai.api_server \

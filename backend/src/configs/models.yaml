@@ -14,7 +14,7 @@ models:
   # Reranking model (served locally via FastAPI)
   reranking:
     active: "Qwen/Qwen3-Reranker-0.6B"  # Default base model
-    fallback: "rerank-english-v3.0"  # Cohere fallback
+    fallback: "rerank-v3.5"  # Cohere fallback
     description: "Reranking model for document scoring"
     
   # Guardrails model (served locally via FastAPI)
@@ -25,9 +25,9 @@ models:
 
 # Model serving endpoints
 serving:
-  # vllm_url: "http://vllm:8000"  
-  # vllm_api_key: "vllm"
-  vllm_url: "http://171.248.248.17:47311"  
-  vllm_api_key: "1a9793879f4ca1f83642194bf3169d068d9f91c8f4791eaad5f0397554f43674"
+  vllm_url: "http://vllm:8000"  
+  vllm_api_key: "vllm"
+  # vllm_url: "http://171.248.248.17:47311"  
+  # vllm_api_key: "1a9793879f4ca1f83642194bf3169d068d9f91c8f4791eaad5f0397554f43674"
   local_models: true  
   

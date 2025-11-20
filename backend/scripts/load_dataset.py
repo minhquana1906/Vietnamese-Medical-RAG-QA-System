@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-"""
-Load Vietnamese Medical Dataset from HuggingFace Hub
-
-Downloads and prepares:
-- quannguyen204/vietnamese_medical_corpus_dataset - Comprehensive Vietnamese medical corpus for RAG indexing
-
-Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
-
-Usage:
-    python -m backend.scripts.load_dataset --output-dir ./data
-    python -m backend.scripts.load_dataset --output-dir ./data --cache-dir /custom/cache
-"""
-
 import argparse
 import logging
 from pathlib import Path
@@ -27,18 +13,7 @@ logging.basicConfig(level=logging.INFO)
 def load_vietnamese_medical_corpus(
     output_dir: Path, cache_dir: Optional[Path] = None
 ) -> None:
-    """
-    Load quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub.
 
-    This dataset contains comprehensive Vietnamese medical documents for RAG indexing,
-    including medical articles, clinical guidelines, drug information, and health resources.
-
-    Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset
-
-    Args:
-        output_dir: Directory to save the dataset
-        cache_dir: Optional cache directory for HuggingFace datasets
-    """
     logger.info(
         "Loading quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace Hub..."
     )

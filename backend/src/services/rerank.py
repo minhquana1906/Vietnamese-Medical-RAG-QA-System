@@ -35,7 +35,7 @@ class Qwen3RerankerService:
 
     def __init__(
         self,
-        local_url: str = "http://localhost:8000",
+        local_url: Optional[str] = None,
         cohere_fallback: bool = True,
         task_instruction: Optional[str] = None,
     ):
@@ -43,21 +43,22 @@ class Qwen3RerankerService:
         Initialize Qwen3 Reranker Service with local FastAPI backend.
 
         Args:
-            local_url: Local backend URL
+            local_url: Local backend URL (defaults to settings.backend_api_url)
             cohere_fallback: Enable Cohere fallback if local fails
             task_instruction: Custom task instruction (default: medical retrieval)
         """
-        self.local_url = local_url
+        self.local_url = local_url or settings.backend_api_url
         self.huggingface_model = get_reranking_model()
         self.task_instruction = task_instruction or self.DEFAULT_TASK_INSTRUCTION
 
         logger.debug(
-            f"Init Qwen3RerankerService: Local={local_url}, Model={self.huggingface_model}"
+            f"Init Qwen3RerankerService: Local={self.local_url}, Model={self.huggingface_model}"
         )
         logger.debug(f"Task instruction: {self.task_instruction[:80]}...")
 
         self.cohere_fallback = cohere_fallback
-        self.client = httpx.Client(timeout=30.0)
+        # Increase timeout for first-time model loading (30s -> 120s)
+        self.client = httpx.Client(timeout=120.0)
 
     def rerank(
         self,
@@ -151,9 +152,13 @@ class Qwen3RerankerService:
         scores = result["scores"]
         indices = result["indices"]
 
-        # Create reranked results
+        # Create reranked results with dict format (consistent interface)
         scored_docs = [
-            {"index": indices[i], "relevance_score": scores[i]}
+            {
+                "index": indices[i],
+                "relevance_score": scores[i],
+                "document": documents[indices[i]],  # Include original document
+            }
             for i in range(len(indices))
         ]
 
@@ -162,10 +167,20 @@ class Qwen3RerankerService:
     def _format_rerank_context(
         self, documents: List[Dict[str, Any]], reranked_results: List[Dict[str, Any]]
     ) -> str:
-        """Format reranked documents into context string."""
+        """
+        Format reranked documents into context string.
+
+        Args:
+            documents: Original document list (unused, kept for backward compatibility)
+            reranked_results: List of dicts with keys: index, relevance_score, document
+
+        Returns:
+            Formatted context string with ranked documents
+        """
         context_parts = []
         for rank, result in enumerate(reranked_results, start=1):
-            doc = documents[result["index"]]
+            # Use embedded document if available, otherwise fallback to documents list
+            doc = result.get("document") or documents[result["index"]]
             score = result["relevance_score"]
             context_parts.append(
                 f"#Rank {rank} (Relevance Score = {score:.3f}):\n"
@@ -203,7 +218,12 @@ def cohere_rerank(
     model: Optional[str] = None,
     top_n: int = 5,
 ) -> Tuple[List[Dict[str, Any]], str]:
-    """Rerank documents using Cohere API."""
+    """
+    Rerank documents using Cohere API.
+
+    Returns normalized dict format consistent with Qwen3RerankerService:
+    [{"index": int, "relevance_score": float, "document": dict}, ...]
+    """
     try:
         # Use fallback model from config if not specified
         if model is None:
@@ -212,23 +232,32 @@ def cohere_rerank(
         client = get_cohere_client()
         yaml_docs = [yaml.dump(doc, sort_keys=False) for doc in relevant_docs]
 
-        reranked_documents = client.rerank(
+        cohere_results = client.rerank(
             query=query, documents=yaml_docs, model=model, top_n=top_n
         ).results
-        logger.debug(
-            f"Reranked documents with Cohere model={model}: {reranked_documents}"
-        )
+        logger.debug(f"Reranked documents with Cohere model={model}: {cohere_results}")
+
+        # Normalize Cohere response to dict format (consistent with Qwen3)
+        reranked_documents = [
+            {
+                "index": result.index,
+                "relevance_score": result.relevance_score,
+                "document": relevant_docs[result.index],
+            }
+            for result in cohere_results
+        ]
 
         rerank_context = "\n\n".join(
             [
-                f"#Rank {rank} (Relevance Score = {doc.relevance_score:.3f}):\nTitle: {relevant_docs[doc.index]['title']}\nContent: {relevant_docs[doc.index]['content']}"
+                f"#Rank {rank} (Relevance Score = {doc['relevance_score']:.3f}):\n"
+                f"Title: {doc['document']['title']}\n"
+                f"Content: {doc['document']['content']}"
                 for rank, doc in enumerate(reranked_documents, start=1)
             ]
         )
         logger.info(f"Reranked {len(reranked_documents)} docs with Cohere")
 
-        result = (reranked_documents, rerank_context)
-        return result
+        return reranked_documents, rerank_context
     except Exception as e:
         logger.error(f"Error reranking documents with Cohere: {e}")
         raise

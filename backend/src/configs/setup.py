@@ -60,6 +60,14 @@ class BackendSettings(BaseSettings):
     def vllm_url(self) -> str:
         return f"http://{self.vllm_host}:{self.vllm_port}"
 
+    # Backend API (for embedding/rerank/guardrails models served by FastAPI)
+    backend_api_host: str = Field(default=os.getenv("BACKEND_API_HOST", "chatbot_api"))
+    backend_api_port: int = Field(default=int(os.getenv("BACKEND_API_PORT", "8000")))
+
+    @property
+    def backend_api_url(self) -> str:
+        return f"http://{self.backend_api_host}:{self.backend_api_port}"
+
     # Vector Database
     qdrant_host: str = Field(default=os.getenv("QDRANT_HOST", "qdrant_db"))
     qdrant_port: str = Field(default=os.getenv("QDRANT_PORT", "6333"))
@@ -92,7 +100,7 @@ class BackendSettings(BaseSettings):
     deepseek_baseurl: str = Field(
         default=os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
     )
-    cohere_rerank_model: str = Field(default="rerank-multilingual-v3.0")
+    cohere_rerank_model: str = Field(default="rerank-v3.5")
 
     # Qwen3 models
     qwen3_llm: str = Field(default="Qwen/Qwen3-4B-Instruct-2507")
@@ -112,7 +120,7 @@ class BackendSettings(BaseSettings):
     # Qdrant vector database configuration
     default_collection_name: str = Field(default="documents")
     vector_dimension: int = Field(default=1024)
-    top_k: int = Field(default=20)
+    top_k: int = Field(default=5)
 
     # CHUNKING settings
     chunk_size: int = Field(default=512)

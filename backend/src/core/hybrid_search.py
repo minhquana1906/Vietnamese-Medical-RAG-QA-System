@@ -1,6 +1,9 @@
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
+from ..configs.setup import get_backend_settings
+
+settings = get_backend_settings()
 
 
 def reciprocal_rank_fusion(
@@ -51,7 +54,7 @@ def hybrid_search(
     query: str,
     vector_search_fn,
     keyword_search_fn,
-    top_k: int = 20,
+    top_k: int = settings.top_k,
     rrf_k: int = 60,
     use_cache: bool = True,
 ) -> List[Dict[str, Any]]:
@@ -146,7 +149,7 @@ def hybrid_search_with_filters(
     keyword_search_fn,
     doc_type_filter: Optional[str] = None,
     source_filter: Optional[str] = None,
-    top_k: int = 20,
+    top_k: int = settings.top_k,
     rrf_k: int = 60,
 ) -> List[Dict[str, Any]]:
     # Vector search with filters

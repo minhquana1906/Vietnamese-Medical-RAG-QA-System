@@ -7,7 +7,6 @@ from loguru import logger
 from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
 from .core.vectorize import search_vectors, upsert_points
-from .services.agent import ai_agent_handle
 from .services.brain import (
     detect_route,
     enhance_query_quality,
@@ -55,7 +54,7 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
         from .models import Chunk
 
         metadata = metadata or {}
-        
+
         # Chunk the document using fixed semantic strategy (T087)
         nodes = fixed_semantic_chunking(
             text=content, metadata={"doc_id": doc_id, "title": title}
@@ -93,10 +92,10 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
 
             # Generate unique chunk ID
             chunk_id = str(uuid.uuid4())
-            
+
             # Calculate token count for metadata
             token_count = len(node.text.split())  # Rough estimate
-            
+
             # Prepare enhanced metadata (T095: source_document_id, chunk_index, section_title, page_number)
             chunk_metadata = {
                 "source_document_id": doc_id,
@@ -107,16 +106,22 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
                 "language": language,
                 "token_count": token_count,
             }
-            
+
             # Add optional fields if present
             if section_title:
                 chunk_metadata["section_title"] = section_title
             if page_number is not None:
                 chunk_metadata["page_number"] = page_number
-            
+
             # Add any additional metadata from document
             for key, value in metadata.items():
-                if key not in ["source", "doc_type", "language", "section_title", "page_number"]:
+                if key not in [
+                    "source",
+                    "doc_type",
+                    "language",
+                    "section_title",
+                    "page_number",
+                ]:
                     chunk_metadata[key] = value
 
             # Prepare Qdrant point with enhanced metadata (T097)
@@ -144,15 +149,17 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
                     "metadata": chunk_metadata,
                 }
             )
-            
+
             # Prepare database chunk (T095)
-            db_chunks.append({
-                "id": UUID(chunk_id),
-                "documentId": UUID(doc_id),
-                "chunkIndex": chunk_index,
-                "content": node.text,
-                "metadata_": chunk_metadata,
-            })
+            db_chunks.append(
+                {
+                    "id": UUID(chunk_id),
+                    "documentId": UUID(doc_id),
+                    "chunkIndex": chunk_index,
+                    "content": node.text,
+                    "metadata_": chunk_metadata,
+                }
+            )
 
         # Store chunks in database (T095)
         if db_chunks:
@@ -168,7 +175,9 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
             upsert_points(
                 qdrant_points, collection_name=settings.default_collection_name
             )
-            logger.info(f"✅ Indexed {len(qdrant_points)} chunks to Qdrant with enhanced metadata")
+            logger.info(
+                f"✅ Indexed {len(qdrant_points)} chunks to Qdrant with enhanced metadata"
+            )
         else:
             logger.warning(f"⚠️ No embeddings generated for document '{title}'")
 
@@ -355,7 +364,7 @@ def rag_qa_task(self, history, question):
         # Check if RAG results have sufficient confidence. If best score is too low, use web search
         use_web_search = False
         if not reranked_results or (
-            reranked_results and reranked_results[0]["relevance_score"] < 0.5
+            reranked_results and reranked_results[0]["relevance_score"] < 0.005
         ):
             logger.info(
                 f"⚠️  RAG confidence low (best score: {reranked_results[0]['relevance_score'] if reranked_results else 0:.3f}), "
@@ -381,19 +390,13 @@ def rag_qa_task(self, history, question):
 
         messages = [{"role": "system", "content": settings.system_prompt}]
 
-        # Add history with automatic summarization if too long
-        # Target: ~2000 tokens for history (8000 chars) to leave room for:
-        # - Context: ~1000 tokens (RAG or Tavily)
-        # - System prompt: ~200 tokens
-        # - Generation: ~2048 tokens
-        # Total: ~5248 tokens (well under 8192 limit)
         history_with_system = messages + history
         optimized_history = summarize_old_messages(
             history_with_system, target_tokens=2000
         )
         messages = optimized_history
 
-        max_retries = 2
+        max_retries = 0  # DISABLED: No retry for output validation (testing mode)
         retry_count = 0
         final_response = None
 
@@ -520,11 +523,6 @@ def rag_qa_task(self, history, question):
         return "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
 
 
-# ============================================================================
-# Dataset Ingestion & Indexing Tasks (T093)
-# ============================================================================
-
-
 @shared_task(bind=True)
 def ingest_dataset_task(
     self,
@@ -590,7 +588,11 @@ def ingest_dataset_task(
 
         with SessionLocal() as db:
             for idx, item in enumerate(dataset):
-                if max_documents and idx >= max_documents:
+                # CRITICAL FIX: Check max_documents against PROCESSED count, not dataset index
+                if max_documents and documents_indexed >= max_documents:
+                    logger.info(
+                        f"✅ Reached max_documents limit ({max_documents}), stopping ingestion"
+                    )
                     break
 
                 # Extract document fields (adapt to dataset structure)
@@ -652,14 +654,15 @@ def ingest_dataset_task(
                     f"Chunking and indexing document {idx+1}/{total_docs}: {title[:50]}"
                 )
                 chunk_result = chunk_and_index_document(
-                    str(new_doc.id), 
-                    title, 
+                    str(new_doc.id),
+                    title,
                     content,
-                    metadata=metadata  # Pass metadata to chunking function
+                    metadata=metadata,  # Pass metadata to chunking function
                 )
 
                 # Update document as indexed with timestamp (T102b)
                 from datetime import datetime
+
                 new_doc.metadata_["is_indexed"] = True
                 new_doc.metadata_["indexed_at"] = datetime.utcnow().isoformat()
                 db.commit()
@@ -783,10 +786,10 @@ def reindex_document_task(self, document_id: str):
             # Re-chunk and re-index with document metadata
             doc_metadata = doc.metadata_ or {}
             chunk_result = chunk_and_index_document(
-                str(doc.id), 
-                doc.title, 
+                str(doc.id),
+                doc.title,
                 doc.content,
-                metadata=doc_metadata  # Pass document metadata
+                metadata=doc_metadata,  # Pass document metadata
             )
 
             # Update document as indexed

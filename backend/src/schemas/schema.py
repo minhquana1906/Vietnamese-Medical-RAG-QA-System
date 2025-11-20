@@ -70,7 +70,10 @@ class GuardRequest(BaseModel):
     """Qwen3Guard safety check request"""
 
     text: str
-    check_type: str = "input"
+    check_type: str = "input"  # "input" | "output"
+    query: Optional[str] = (
+        None  # Required for output moderation (user's original query)
+    )
 
 
 class GuardResponse(BaseModel):
@@ -90,13 +93,16 @@ class GuardResponse(BaseModel):
 class IngestDatasetRequest(BaseModel):
     """Request to ingest a HuggingFace dataset"""
 
-    dataset_name: str = Field(..., description="HuggingFace dataset identifier")
+    dataset_name: str = Field(
+        "quannguyen204/vietnamese_medical_corpus_dataset",
+        description="HuggingFace dataset identifier",
+    )
     dataset_config: Optional[str] = Field(
-        None, description="Dataset configuration name"
+        "default", description="Dataset configuration name"
     )
     split: str = Field("train", description="Dataset split to load")
     doc_type: Optional[str] = Field(
-        None, description="Document type for all documents in dataset"
+        "clinical_guideline", description="Document type for all documents in dataset"
     )
     max_documents: Optional[int] = Field(
         None, description="Limit number of documents to ingest (for testing)"

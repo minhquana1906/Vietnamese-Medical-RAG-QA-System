@@ -381,6 +381,7 @@ async def guard_endpoint(request: GuardRequest):
             model_registry.check_safety(
                 text=request.text,
                 check_type=request.check_type,
+                query=request.query,  # Pass query for output moderation
             )
         )
 
@@ -408,11 +409,6 @@ async def guard_endpoint(request: GuardRequest):
     except Exception as e:
         logger.error(f"Guardrails error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# Document Management & Indexing Endpoints
-# ============================================================================
 
 
 @app.post("/indexing/ingest-dataset", response_model=IngestDatasetResponse)
@@ -458,7 +454,10 @@ async def get_indexing_job_status(job_id: str):
     """
     try:
         from celery.result import AsyncResult
-        from .configs.celery_config import celery_app
+        from .configs.celery_config import get_celery_app
+
+        celery_app = get_celery_app(__name__)
+        celery_app.autodiscover_tasks()
 
         task_result = AsyncResult(job_id, app=celery_app)
 
