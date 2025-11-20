@@ -38,7 +38,7 @@ backend = [
     "cohere>=5.18.0",
     "databases==0.8.0",
     "dotenv>=0.9.9",
-    "elasticsearch>=8.11.0",
+    "elasticsearch==8.11.0",
     "fastapi>=0.115.3",
     "function-schema>=0.4.5",
     "llama-index>=0.10.56",
@@ -67,6 +67,7 @@ backend = [
     "torch>=2.2.0",
     "transformers>=4.57.0",
     "sentence-transformers>=4.0.0",
+    "datasets>=2.15.0",
 ]
 frontend = [
     "requests==2.32.3",

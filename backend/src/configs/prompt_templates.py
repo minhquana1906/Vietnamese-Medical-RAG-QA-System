@@ -41,7 +41,7 @@ Mọi câu trả lời phải tuân theo format markdown này:
 ---
 
 ### 📚 Nguồn tham khảo
-[Danh sách URLs đã trích dẫn]
+[Danh sách URLs đã trích dẫn, nếu không có thì bỏ qua, không được tự bịa đặt nguồn]
 
 ## XỬ LÝ CONTEXT & WEB SEARCH
 

@@ -23,10 +23,14 @@ class ElasticsearchClient:
         self.index_name = index_name
 
         try:
+            # Force compatibility with Elasticsearch 8.x (server version)
             self.client = Elasticsearch(
                 [f"http://{self.host}:{self.port}"],
                 verify_certs=False,
                 request_timeout=30,
+                headers={
+                    "Accept": "application/vnd.elasticsearch+json; compatible-with=8"
+                },
             )
             # Test connection
             if self.client.ping():
@@ -197,7 +201,7 @@ class ElasticsearchClient:
     def search_bm25(
         self,
         query: str,
-        top_k: int = 20,
+        top_k: int = settings.top_k,
         doc_type_filter: Optional[str] = None,
         source_filter: Optional[str] = None,
     ) -> List[Dict[str, Any]]:

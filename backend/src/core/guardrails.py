@@ -51,25 +51,22 @@ class Qwen3GuardService:
 
     def __init__(
         self,
-        local_url: str = "http://localhost:8000",
+        local_url: Optional[str] = None,
         threshold: Optional[float] = None,
     ):
         """
         Initialize Qwen3Guard service.
 
         Args:
-            local_url: Local FastAPI backend URL
+            local_url: Local FastAPI backend URL (defaults to settings.backend_api_url)
             threshold: Safety threshold (not used in Qwen3Guard, kept for compatibility)
         """
-        self.local_url = local_url
+        self.local_url = local_url or settings.backend_api_url
         self.threshold = threshold or get_guardrails_threshold()
         self.huggingface_model = get_guardrails_model()
 
-        self.client = httpx.Client(timeout=10.0)
-
-        logger.debug(
-            f"Init Qwen3GuardService: Local={local_url}, Model={self.huggingface_model}"
-        )
+        # TESTING MODE: Increase timeout for CPU inference (60s -> 180s)
+        self.client = httpx.Client(timeout=180.0)
 
     def validate_query(self, query: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
         """

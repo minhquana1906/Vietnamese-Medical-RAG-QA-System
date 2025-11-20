@@ -204,9 +204,9 @@
 - [X] T097 [US4] Update Qdrant insertion in backend/src/core/vectorize.py to include enhanced metadata in payload
 - [X] T098 [US4] Update Elasticsearch indexing in backend/src/services/elasticsearch.py with full metadata fields
 - [X] T099 [US4] Implement progress tracking in chunk_and_index_document task using Celery task.update_state
-- [ ] T100 [US4] Run backend/scripts/load_dataset.py to download quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace (https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset)
-- [ ] T101 [US4] Execute POST /indexing/ingest-dataset to index vietnamese_medical_corpus_dataset into Qdrant and Elasticsearch
-- [ ] T102 [US4] Verify all documents indexed successfully with metadata completeness check
+- [X] T100 [US4] Run backend/scripts/load_dataset.py to download quannguyen204/vietnamese_medical_corpus_dataset from HuggingFace (https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset)
+- [X] T101 [US4] Execute POST /indexing/ingest-dataset to index vietnamese_medical_corpus_dataset into Qdrant and Elasticsearch
+- [X] T102 [US4] Verify all documents indexed successfully with metadata completeness check
 - [X] T102a [P] [US4] Implement incremental dataset update logic in backend/src/tasks.py to handle document updates without full reindex (check document hash, update only changed documents)
 - [X] T102b [P] [US4] Add dataset version tracking in backend/src/models.py to support incremental updates per FR-026
 

@@ -120,7 +120,7 @@ Follow-up TODOs:
 - **Cache/Queue**: Redis 5.0.7 (with Celery 5.4.0)
 - **Search**: Elasticsearch 8.11.0 (BM25 keyword search)
 - **LLM Provider**: OpenAI (gpt-4o-mini, text-embedding-3-small), Deepseek (chat, reasoner)
-- **Reranking**: Cohere (rerank-multilingual-v3.0)
+- **Reranking**: Cohere (rerank-v3.5)
 - **Deployment**: Docker Compose with separate containers (API, Worker, DBs)
 
 **Frontend Framework Rationale**: Chainlit 1.3.2 provides:

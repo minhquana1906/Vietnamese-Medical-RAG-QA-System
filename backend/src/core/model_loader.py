@@ -69,15 +69,35 @@ class ModelRegistry:
             self.embedding_model.eval()
             logger.info(f"✅ Qwen3-Embedding loaded (1024-dim, instruction-aware)")
 
-            # Qwen3-Reranker-0.6B
+            # Qwen3-Reranker-0.6B (Causal LM, not classifier!)
             rerank_repo = get_reranking_model()
             logger.info(f"Loading Qwen3-Reranker: {rerank_repo}")
-            self.rerank_tokenizer = AutoTokenizer.from_pretrained(rerank_repo)
-            self.rerank_model = AutoModel.from_pretrained(
-                rerank_repo, trust_remote_code=True
+            self.rerank_tokenizer = AutoTokenizer.from_pretrained(
+                rerank_repo, padding_side="left"
+            )
+            self.rerank_model = AutoModelForCausalLM.from_pretrained(
+                rerank_repo, trust_remote_code=True, dtype="auto"
             ).to(self.device)
             self.rerank_model.eval()
-            logger.info(f"✅ Qwen3-Reranker loaded (yes/no token scoring)")
+
+            # Precompute token IDs for yes/no (Qwen3-Reranker official spec)
+            self.token_true_id = self.rerank_tokenizer.convert_tokens_to_ids("yes")
+            self.token_false_id = self.rerank_tokenizer.convert_tokens_to_ids("no")
+
+            # Precompute prefix/suffix tokens (official Qwen3-Reranker template)
+            prefix = '<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
+            suffix = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+            self.rerank_prefix_tokens = self.rerank_tokenizer.encode(
+                prefix, add_special_tokens=False
+            )
+            self.rerank_suffix_tokens = self.rerank_tokenizer.encode(
+                suffix, add_special_tokens=False
+            )
+            self.rerank_max_length = 1024  # Qwen3-Reranker max length
+
+            logger.info(
+                f"✅ Qwen3-Reranker loaded (yes/no token scoring, max_len={self.rerank_max_length})"
+            )
 
             # Qwen3Guard-Gen-0.6B
             guard_repo = get_guardrails_model()
@@ -85,16 +105,48 @@ class ModelRegistry:
             self.guard_tokenizer = AutoTokenizer.from_pretrained(guard_repo)
             # Qwen3Guard requires AutoModelForCausalLM (generation model, not embedding model)
             self.guard_model = AutoModelForCausalLM.from_pretrained(
-                guard_repo, trust_remote_code=True, torch_dtype="auto"
+                guard_repo, trust_remote_code=True, dtype="auto"
             ).to(self.device)
             self.guard_model.eval()
             logger.info(f"✅ Qwen3Guard loaded (3-tier severity, 9 categories)")
 
             logger.info("🎉 All Qwen3 models loaded successfully!")
 
+            # Warm-up models with dummy inference to avoid first-request slowness
+            self._warmup_models()
+
         except Exception as e:
             logger.error(f"❌ Failed to load Qwen3 models: {e}")
             raise
+
+    def _warmup_models(self):
+        """
+        Warm-up all models with dummy inference.
+        This eliminates first-request slowness caused by model initialization.
+        """
+        try:
+            logger.info("🔥 Warming up models with dummy inference...")
+
+            # Warm-up Embedding model
+            dummy_text = "Hello world"
+            _ = self.embed_texts([dummy_text], normalize=True, is_query=True)
+            logger.debug("✅ Embedding model warmed up")
+
+            # Warm-up Reranker model
+            dummy_query = "What is AI?"
+            dummy_docs = ["Artificial Intelligence is a field of computer science."]
+            _ = self.rerank_documents(dummy_query, dummy_docs, top_n=1)
+            logger.debug("✅ Reranker model warmed up")
+
+            # Warm-up Guardrails model
+            dummy_prompt = "Hello, how are you?"
+            _ = self.check_safety(dummy_prompt, check_type="input")
+            logger.debug("✅ Guardrails model warmed up")
+
+            logger.info("🔥 All models warmed up successfully!")
+
+        except Exception as e:
+            logger.warning(f"⚠️  Model warm-up failed (not critical): {e}")
 
     def is_ready(self) -> bool:
         """Check if all models are loaded"""
@@ -156,7 +208,7 @@ class ModelRegistry:
         # Tokenize
         encoded = self.embedding_tokenizer(
             formatted_texts,
-            padding=True,
+            # padding=True,
             truncation=True,
             return_tensors="pt",
             max_length=512,
@@ -183,24 +235,29 @@ class ModelRegistry:
         instruction: str = "Given a medical query, determine if the passage contains the answer",
     ) -> Tuple[List[float], List[int]]:
         """
-        Rerank documents using Qwen3-Reranker with yes/no token scoring.
+        Rerank documents using Qwen3-Reranker-0.6B (official implementation).
 
         Args:
             query: Search query
             documents: List of documents to rerank
             top_n: Number of top results to return
-            instruction: Task instruction for better relevance
+            instruction: Task instruction for instruction-aware reranking
 
         Returns:
-            (scores, sorted_indices) - Scores based on yes/no token logprobs
+            (scores, sorted_indices) - Relevance scores and document indices
 
-        Note: Qwen3-Reranker uses special format:
-        "<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}"
+        Implementation follows official Qwen3-Reranker specification:
+        - Format: "<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}"
+        - Model: AutoModelForCausalLM (NOT sequence classifier)
+        - Scoring: Extract logits[:, -1, :] for yes/no tokens
+        - Formula: log_softmax([P(no), P(yes)]), then exp(log_P(yes))
+
+        Reference: https://huggingface.co/Qwen/Qwen3-Reranker-0.6B
         """
         if self.rerank_model is None or self.rerank_tokenizer is None:
             raise RuntimeError("Qwen3-Reranker model not loaded")
 
-        # Format pairs with Qwen3 template
+        # Format pairs with official Qwen3-Reranker template
         formatted_pairs = []
         for doc in documents:
             pair_text = (
@@ -208,32 +265,58 @@ class ModelRegistry:
             )
             formatted_pairs.append(pair_text)
 
-        # Tokenize
-        encoded = self.rerank_tokenizer(
+        # Process inputs with prefix/suffix tokens (official spec)
+        inputs = self.rerank_tokenizer(
             formatted_pairs,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-            max_length=512,
-        ).to(self.device)
+            padding=False,
+            truncation="longest_first",
+            return_attention_mask=False,
+            max_length=self.rerank_max_length
+            - len(self.rerank_prefix_tokens)
+            - len(self.rerank_suffix_tokens),
+        )
 
-        # Inference with yes/no token scoring
+        # Add prefix/suffix tokens to each input
+        for i, ele in enumerate(inputs["input_ids"]):
+            inputs["input_ids"][i] = (
+                self.rerank_prefix_tokens + ele + self.rerank_suffix_tokens
+            )
+
+        # Pad and convert to tensors (no max_length needed here - already truncated above)
+        inputs = self.rerank_tokenizer.pad(inputs, padding=True, return_tensors="pt")
+
+        # Move to device
+        for key in inputs:
+            inputs[key] = inputs[key].to(self.device)
+
+        # Inference with yes/no token scoring (official Qwen3-Reranker method)
         with torch.no_grad():
-            outputs = self.rerank_model(**encoded, return_dict=True)
-            logits = outputs.logits
+            outputs = self.rerank_model(**inputs)
 
-            # Extract yes/no token probabilities
-            # Qwen3-Reranker: score = P(yes) - P(no)
-            yes_token_id = self.rerank_tokenizer.convert_tokens_to_ids("yes")
-            no_token_id = self.rerank_tokenizer.convert_tokens_to_ids("no")
+            # Extract last token logits (causal LM output)
+            batch_scores = outputs.logits[:, -1, :]
 
-            yes_logits = logits[:, yes_token_id]
-            no_logits = logits[:, no_token_id]
+            # Get yes/no token logits
+            true_vector = batch_scores[:, self.token_true_id]
+            false_vector = batch_scores[:, self.token_false_id]
 
-            # Relevance score: difference of probabilities
-            scores = (yes_logits - no_logits).cpu().tolist()
+            # Stack and apply log_softmax
+            batch_scores = torch.stack([false_vector, true_vector], dim=1)
+            batch_scores = torch.nn.functional.log_softmax(batch_scores, dim=1)
 
-        # Sort by relevance
+            # Get P(yes) by exponentiating log_P(yes)
+            scores = batch_scores[:, 1].exp().cpu().tolist()
+
+        # Sort by relevance (descending)
+        sorted_indices = sorted(
+            range(len(scores)), key=lambda i: scores[i], reverse=True
+        )[:top_n]
+
+        sorted_scores = [scores[i] for i in sorted_indices]
+
+        return sorted_scores, sorted_indices
+
+        # Sort by relevance (descending)
         sorted_indices = sorted(
             range(len(scores)), key=lambda i: scores[i], reverse=True
         )[:top_n]
@@ -246,10 +329,13 @@ class ModelRegistry:
 
     def _parse_qwen3guard_output(self, text: str) -> Dict[str, Any]:
         """
-        Parse Qwen3Guard output format:
+        Parse Qwen3Guard output format (official specification):
+
         Safety: Safe|Unsafe|Controversial
-        Categories: [cat1, cat2, ...]
+        Categories: Violent|Non-violent Illegal Acts|Sexual Content or Sexual Acts|...
         Refusal: Yes|No
+
+        Note: Categories are comma/newline separated, NOT in brackets
         """
         result = {
             "severity": "Safe",
@@ -264,15 +350,20 @@ class ModelRegistry:
         if severity_match:
             result["severity"] = severity_match.group(1).capitalize()
 
-        # Parse categories
-        categories_match = re.search(r"Categories:\s*\[(.*?)\]", text, re.IGNORECASE)
+        # Parse categories (official format: comma or newline separated)
+        # Example: "Categories: Violent" or "Categories: Violent, PII"
+        categories_match = re.search(
+            r"Categories:\s*(.+?)(?:\n|Refusal:|$)", text, re.IGNORECASE | re.DOTALL
+        )
         if categories_match:
-            cats_str = categories_match.group(1)
+            cats_str = categories_match.group(1).strip()
+            # Split by comma, newline, or pipe
+            raw_cats = re.split(r"[,\n|]+", cats_str)
             result["categories"] = [
-                cat.strip().strip("'\"") for cat in cats_str.split(",") if cat.strip()
+                cat.strip() for cat in raw_cats if cat.strip() and cat.strip() != "None"
             ]
 
-        # Parse refusal
+        # Parse refusal (only present in output moderation)
         refusal_match = re.search(r"Refusal:\s*(Yes|No)", text, re.IGNORECASE)
         if refusal_match:
             result["is_refusal"] = refusal_match.group(1).lower() == "yes"
@@ -280,14 +371,15 @@ class ModelRegistry:
         return result
 
     def check_safety(
-        self, text: str, check_type: str = "input"
+        self, text: str, check_type: str = "input", query: Optional[str] = None
     ) -> Tuple[bool, str, List[str], bool, str]:
         """
         Check content safety using Qwen3Guard-Gen-0.6B.
 
         Args:
-            text: Content to check
-            check_type: "input" or "output"
+            text: Content to check (query for input, response for output)
+            check_type: "input" (user query) or "output" (LLM response)
+            query: Original user query (REQUIRED for output moderation)
 
         Returns:
             (is_safe, severity, categories, is_refusal, raw_output)
@@ -316,18 +408,23 @@ class ModelRegistry:
             # Prompt moderation: user message only
             messages = [{"role": "user", "content": text}]
         else:
-            # Response moderation: NOT SUPPORTED yet (needs query + response)
-            # For now, treat as input moderation
-            messages = [{"role": "user", "content": text}]
+            # Response moderation: requires user query + assistant response
+            if not query:
+                raise ValueError(
+                    "query parameter is REQUIRED for output moderation (check_type='output')"
+                )
+            messages = [
+                {"role": "user", "content": query},
+                {"role": "assistant", "content": text},
+            ]
 
-        # Apply chat template (Qwen3 specification)
-        prompt = self.guard_tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=False
-        )
+        # Apply chat template (official Qwen3Guard spec)
+        # For Qwen3Guard, we need to prepare prompt for generation
+        text = self.guard_tokenizer.apply_chat_template(messages, tokenize=False)
 
         # Tokenize
         model_inputs = self.guard_tokenizer(
-            [prompt], return_tensors="pt", padding=True, truncation=True, max_length=512
+            [text], return_tensors="pt", padding=True, truncation=True, max_length=512
         ).to(self.device)
 
         # Generate safety assessment (Qwen3Guard specification)

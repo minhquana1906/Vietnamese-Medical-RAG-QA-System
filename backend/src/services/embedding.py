@@ -33,7 +33,7 @@ class Qwen3EmbeddingService:
 
     def __init__(
         self,
-        local_url: str = "http://localhost:8000",
+        local_url: Optional[str] = None,
         openai_fallback: bool = True,
         task_instruction: Optional[str] = None,
     ):
@@ -41,16 +41,16 @@ class Qwen3EmbeddingService:
         Initialize Qwen3 Embedding Service with local FastAPI backend.
 
         Args:
-            local_url: Local backend URL
+            local_url: Local backend URL (defaults to settings.backend_api_url)
             openai_fallback: Enable OpenAI fallback if local fails
             task_instruction: Custom task instruction (default: medical retrieval)
         """
-        self.local_url = local_url
+        self.local_url = local_url or settings.backend_api_url
         self.huggingface_model = get_embedding_model()
         self.task_instruction = task_instruction or self.DEFAULT_TASK_INSTRUCTION
 
         logger.debug(
-            f"Init Qwen3EmbeddingService: Local={local_url}, Model={self.huggingface_model}"
+            f"Init Qwen3EmbeddingService: Local={self.local_url}, Model={self.huggingface_model}"
         )
         logger.debug(f"Task instruction: {self.task_instruction[:80]}...")
 
