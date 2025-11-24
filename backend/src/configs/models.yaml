@@ -1,0 +1,47 @@
+models:
+  # Generation model (served via vLLM)
+  generation:
+    active: "Qwen/Qwen3-4B-Instruct-2507"  # Default base model
+    fallback: "gpt-4o-mini"  # OpenAI fallback
+    description: "Main generation model for medical QA"
+    
+  # Embedding model (served locally via FastAPI)
+  embedding:
+    active: "Qwen/Qwen3-Embedding-0.6B"  # Default base model
+    fallback: "text-embedding-3-small"  # OpenAI fallback
+    description: "Embedding model for semantic search"
+    
+  # Reranking model (served locally via FastAPI)
+  reranking:
+    active: "Qwen/Qwen3-Reranker-0.6B"  # Default base model
+    fallback: "rerank-v3.5"  # Cohere fallback
+    description: "Reranking model for document scoring"
+    
+  # Guardrails model (served locally via FastAPI)
+  guardrails:
+    active: "Qwen/Qwen3Guard-Gen-0.6B"  # Default base model
+    threshold: 0.7  # Safety threshold
+    description: "Content safety guardrails"
+  
+  # Speech-to-Text model (faster-whisper on GPU service)
+  stt:
+    active: "turbo"  # Whisper-turbo for best speed/quality
+    device: "cuda"  # Always use GPU via qwen3_models service
+    compute_type: "float16"  # FP16 for GPU
+    batch_size: 16  # Batch inference for better GPU utilization
+    description: "Speech-to-text transcription with Whisper-turbo on GPU"
+  
+  # Text-to-Speech (ElevenLabs API)
+  tts:
+    provider: "elevenlabs"  # elevenlabs
+    voice_id: "1rqNHUqUbBGpY3OyzPMI" 
+    model_id: "eleven_v3"  # ElevenLabs model
+    description: "Text-to-speech synthesis"
+
+# Model serving endpoints
+serving:
+  # vllm_url: "http://vllm:8000"  
+  # vllm_api_key: "vllm"
+  vllm_url: "http://171.248.248.17:47503"  
+  vllm_api_key: "fb860dedd5a3551f7de827eeba4b03362f317c7700b35a3299424c2a2b3ca5ba"
+  

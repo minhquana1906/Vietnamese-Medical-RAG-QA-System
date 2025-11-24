@@ -5,8 +5,14 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from .prompt_templates import (INTENT_DETECTION_PROMPT, RAG_PROMPT,
-                               REWRITE_USER_PROMPT, SYSTEM_PROMPT)
+from .prompt_templates import (
+    INTENT_DETECTION_PROMPT,
+    RAG_PROMPT,
+    REWRITE_USER_PROMPT,
+    SYSTEM_PROMPT,
+    SPEECH_RAG_PROMPT,
+    SPEECH_RAG_SYSTEM_PROMPT,
+)
 
 load_dotenv()
 
@@ -23,15 +29,21 @@ class BackendSettings(BaseSettings):
     tavily_api_key: str = Field(default=os.getenv("TAVILY_API_KEY", ""))
     hf_token: str = Field(default=os.getenv("HF_TOKEN", ""))
 
-    jwt_secret: str = Field(default=os.getenv("JWT_SECRET", "CHANGE_ME_INSECURE"))
-    jwt_expiry_hours: int = Field(default=int(os.getenv("JWT_EXPIRY_HOURS", "24")))
-
-    # Digital Ocean Spaces
-    # do_spaces_endpoint: str = Field(default=os.getenv("DO_SPACES_ENDPOINT", "https://sgp1.digitaloceanspaces.com"))
-    # do_spaces_key: str = Field(default=os.getenv("DO_SPACES_KEY", ""))
-    # do_spaces_secret: str = Field(default=os.getenv("DO_SPACES_SECRET", ""))
-    # do_spaces_bucket: str = Field(default=os.getenv("DO_SPACES_BUCKET", "medical-rag-prod"))
-    # do_spaces_region: str = Field(default=os.getenv("DO_SPACES_REGION", "sgp1"))
+    # TTS Configuration (ElevenLabs)
+    elevenlabs_api_key: str = Field(default=os.getenv("ELEVENLABS_API_KEY", ""))
+    elevenlabs_voice_id: str = Field(
+        default=os.getenv("ELEVENLABS_VOICE_ID", "1rqNHUqUbBGpY3OyzPMI")
+    )
+    elevenlabs_model_id: str = Field(
+        default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    )
+    elevenlabs_stability: float = Field(
+        default=float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    )
+    elevenlabs_similarity_boost: float = Field(
+        default=float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.75"))
+    )
+    elevenlabs_speed: float = Field(default=float(os.getenv("ELEVENLABS_SPEED", "1.0")))
 
     # Elasticsearch (BM25 keyword search)
     elasticsearch_host: str = Field(
@@ -56,8 +68,8 @@ class BackendSettings(BaseSettings):
         return f"{self.elasticsearch_scheme}://{self.elasticsearch_host}:{self.elasticsearch_port}"
 
     # vLLM Model Serving (custom generation model: Qwen3-4B-Instruct)
-    vllm_host: str = Field(default=os.getenv("VLLM_HOST", "localhost"))
-    vllm_port: int = Field(default=int(os.getenv("VLLM_PORT", "8000")))
+    vllm_host: str = Field(default=os.getenv("VLLM_HOST", "vllm"))
+    vllm_port: int = Field(default=int(os.getenv("VLLM_PORT", "8001")))
     vllm_model: str = Field(
         default=os.getenv("VLLM_MODEL", "Qwen/Qwen3-4B-Instruct-2507")
     )
@@ -66,18 +78,21 @@ class BackendSettings(BaseSettings):
     def vllm_url(self) -> str:
         return f"http://{self.vllm_host}:{self.vllm_port}"
 
-    # Triton Inference Server (multi-model serving: embedding, reranker, guardrail)
-    triton_host: str = Field(default=os.getenv("TRITON_HOST", "localhost"))
-    triton_http_port: int = Field(default=int(os.getenv("TRITON_HTTP_PORT", "8001")))
-    triton_grpc_port: int = Field(default=int(os.getenv("TRITON_GRPC_PORT", "8002")))
+    # Backend API (for embedding/rerank/guardrails models served by FastAPI)
+    backend_api_host: str = Field(default=os.getenv("BACKEND_API_HOST", "chatbot_api"))
+    backend_api_port: int = Field(default=int(os.getenv("BACKEND_API_PORT", "8000")))
 
     @property
-    def triton_http_url(self) -> str:
-        return f"http://{self.triton_host}:{self.triton_http_port}"
+    def backend_api_url(self) -> str:
+        return f"http://{self.backend_api_host}:{self.backend_api_port}"
 
-    @property
-    def triton_grpc_url(self) -> str:
-        return f"grpc://{self.triton_host}:{self.triton_grpc_port}"
+    # Qwen3 Models GPU Service (NEW: separate GPU service for optimal performance)
+    qwen3_models_url: str = Field(
+        default=os.getenv("QWEN3_MODELS_URL", "http://qwen3_models:8002")
+    )
+    qwen3_models_enabled: bool = Field(
+        default=os.getenv("QWEN3_MODELS_ENABLED", "true").lower() == "true"
+    )
 
     # Vector Database
     qdrant_host: str = Field(default=os.getenv("QDRANT_HOST", "qdrant_db"))
@@ -109,9 +124,9 @@ class BackendSettings(BaseSettings):
     deeseek_chat_model: str = Field(default="deepseek-chat")
     deeseek_reasoner_model: str = Field(default="deepseek-reasoner")
     deepseek_baseurl: str = Field(
-        default=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        default=os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
     )
-    cohere_rerank_model: str = Field(default="rerank-multilingual-v3.0")
+    cohere_rerank_model: str = Field(default="rerank-v3.5")
 
     # Qwen3 models
     qwen3_llm: str = Field(default="Qwen/Qwen3-4B-Instruct-2507")
@@ -122,6 +137,9 @@ class BackendSettings(BaseSettings):
     # Prompt templates
     system_prompt: str = Field(default=SYSTEM_PROMPT)
     rag_prompt: str = Field(default=RAG_PROMPT)
+    speech_rag_system_prompt: str = Field(default=SPEECH_RAG_SYSTEM_PROMPT)
+    speech_rag_prompt: str = Field(default=SPEECH_RAG_PROMPT)
+
     rewrite_prompt: str = Field(default=REWRITE_USER_PROMPT)
     intent_detection_prompt: str = Field(default=INTENT_DETECTION_PROMPT)
 
@@ -136,6 +154,10 @@ class BackendSettings(BaseSettings):
     # CHUNKING settings
     chunk_size: int = Field(default=512)
     chunk_overlap: int = Field(default=50)
+
+    # Logging settings
+    log_level: str = Field(default=os.getenv("LOG_LEVEL", "INFO"))
+    debug: bool = Field(default=os.getenv("DEBUG", "false").lower() == "true")
 
 
 class DatabaseSettings(BaseSettings):

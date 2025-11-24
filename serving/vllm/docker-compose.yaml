@@ -1,0 +1,24 @@
+services:
+  vllm:
+    image: vllm/vllm-openai:v0.8.5
+    container_name: vllm
+    entrypoint: ["/bin/bash", "/vllm_workspace/entrypoint.sh"]
+    env_file:
+      - .env
+    ports:
+      - "8001:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ~/.cache/vllm:/root/.cache/vllm
+      - ./entrypoint.sh:/vllm_workspace/entrypoint.sh
+    networks:
+      - medical_rag_network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+networks:
+  medical_rag_network:
+    external: true

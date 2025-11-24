@@ -1,14 +1,3 @@
-"""
-Locust load testing file for Vietnamese Medical RAG QA System.
-
-Usage:
-    locust -f locustfile.py --host=http://localhost:8000 --users=100 --spawn-rate=10
-
-Test scenarios:
-    - simple_query: Common medical questions (weight 3)
-    - complex_query: Multi-part medical questions (weight 1)
-"""
-
 import random
 
 from locust import HttpUser, between, task
@@ -40,58 +29,6 @@ class RAGUser(HttpUser):
         "Người bị cao huyết áp nên ăn gì và kiêng gì?",
         "Cách chăm sóc bệnh nhân sau phẫu thuật tim mạch",
     ]
-
-    def on_start(self):
-        """Called when a simulated user starts."""
-        # Register/login to get JWT token
-        response = self.client.post(
-            "/auth/login",
-            json={
-                "email": f"test_user_{random.randint(1, 1000)}@example.com",
-                "password": "test_password_123",
-            },
-            name="/auth/login",
-        )
-
-        if response.status_code == 200:
-            self.token = response.json().get("access_token")
-        else:
-            # If login fails, try registration
-            register_response = self.client.post(
-                "/auth/register",
-                json={
-                    "email": f"test_user_{random.randint(1, 1000)}@example.com",
-                    "password": "test_password_123",
-                    "display_name": "Test User",
-                },
-                name="/auth/register",
-            )
-            if register_response.status_code == 200:
-                # Login after registration
-                login_response = self.client.post(
-                    "/auth/login",
-                    json={
-                        "email": register_response.json().get("email"),
-                        "password": "test_password_123",
-                    },
-                    name="/auth/login",
-                )
-                self.token = login_response.json().get("access_token")
-            else:
-                self.token = None
-
-        # Create a chat session
-        if self.token:
-            session_response = self.client.post(
-                "/chat/sessions",
-                headers={"Authorization": f"Bearer {self.token}"},
-                json={"name": "Load Test Session"},
-                name="/chat/sessions (create)",
-            )
-            if session_response.status_code == 200:
-                self.session_id = session_response.json().get("id")
-            else:
-                self.session_id = None
 
     @task(3)
     def simple_query(self):
@@ -164,7 +101,7 @@ class SpikeTestUser(HttpUser):
         self.client.post(
             "/chat/complete",
             json={
-                "bot_id": "medical_bot",
+                "bot_id": "meddy",
                 "user_id": f"spike_user_{self.user_id}",
                 "user_message": query,
                 "is_sync_request": True,

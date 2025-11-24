@@ -37,13 +37,6 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 10s
 
-  # Triton inference server
-  - job_name: 'triton'
-    static_configs:
-      - targets: ['triton:8002']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-
   # Redis exporter (optional - requires redis_exporter sidecar)
   # - job_name: 'redis'
   #   static_configs:

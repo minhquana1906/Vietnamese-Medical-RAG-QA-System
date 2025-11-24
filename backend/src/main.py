@@ -1,19 +1,56 @@
-import asyncio
-import time
-
-from celery.result import AsyncResult
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from loguru import logger
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_client import make_asgi_app
 
 from .configs.setup import get_backend_settings
 from .core.vectorize import create_collection
-from .models import init_db, insert_document
-from .schemas.schema import CompleteRequest
-from .tasks import chunk_and_index_document, message_handler_task
+from .models import init_db
+
+# Import metrics first (before routers to avoid circular import)
+from .core import metrics  # noqa: F401
+
+# Import routers
+from .routers import health, rag, models, audio, documents
 
 settings = get_backend_settings()
 
+# Configure OpenTelemetry tracer
+tracer_provider = TracerProvider()
+trace.set_tracer_provider(tracer_provider)
+tracer = trace.get_tracer(__name__)
+
+# Configure OTLP exporter for Tempo
+try:
+    otlp_exporter = OTLPSpanExporter(
+        endpoint=(
+            settings.tempo_endpoint
+            if hasattr(settings, "tempo_endpoint")
+            else "http://tempo:4317"
+        ),
+        insecure=True,
+    )
+    span_processor = BatchSpanProcessor(otlp_exporter)
+    tracer_provider.add_span_processor(span_processor)
+    logger.info("OpenTelemetry tracing configured successfully")
+except Exception as e:
+    logger.warning(
+        f"Failed to configure OpenTelemetry exporter: {e}. Tracing will be disabled."
+    )
+
+# FastAPI
 app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+# Instrument FastAPI with OpenTelemetry
+FastAPIInstrumentor.instrument_app(app)
+
+# Mount Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 
 @app.on_event("startup")
@@ -21,104 +58,80 @@ def on_startup():
     try:
         init_db()
         create_collection()
+
+        if settings.qwen3_models_enabled:
+            logger.info("Using GPU service for models (qwen3_models)")
+        else:
+            logger.info("Using local CPU models (embedded in backend)")
+            try:
+                from .core.model_loader import get_model_registry
+
+                model_registry = get_model_registry()
+                model_registry.load_models()
+                logger.info("✅ Local models loaded successfully")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to load local models: {e}")
+
+        # Initialize STT service
+        try:
+            from .services.stt_service import initialize_stt_service
+            from .core.model_config import load_model_config
+
+            config = load_model_config()
+            stt_config = config.get("models", {}).get("stt", {})
+
+            # STT now routes to GPU service, just initialize the proxy
+            initialize_stt_service(
+                model_name=stt_config.get("active", "turbo"),
+                device=stt_config.get("device", "cuda"),
+                compute_type=stt_config.get("compute_type", "float16"),
+            )
+            logger.info("✅ STT service initialized (routes to GPU service)")
+        except Exception as e:
+            logger.warning(
+                f"⚠️  Failed to initialize STT service: {e}"
+            )  # Initialize TTS service
+        try:
+            from .services.tts_service import initialize_tts_service
+            import os
+
+            api_key = os.getenv("ELEVENLABS_API_KEY")
+            voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+
+            if api_key:
+                initialize_tts_service(api_key=api_key, voice_id=voice_id)
+                logger.info("✅ TTS service initialized successfully")
+            else:
+                logger.warning("⚠️  ElevenLabs API key not configured, TTS disabled")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to initialize TTS service: {e}")
+
         logger.info("Application startup complete.")
     except Exception as e:
         logger.error(f"Error during startup: {e}")
         raise
 
 
+# Include routers
+app.include_router(health.router)
+app.include_router(rag.router)
+app.include_router(models.router)
+app.include_router(audio.router)
+app.include_router(documents.router)
+
+
 @app.get("/")
 def read_root():
-    return {"message": f"Welcome to the {settings.app_name} API!"}
-
-
-@app.get("/ready")
-async def readiness_check():
-    try:
-        return {"status": "ready", "timestamp": time.time()}
-    except Exception as e:
-        logger.error(f"Readiness check failed: {e}")
-        raise HTTPException(status_code=503, detail="Service not ready")
-
-
-# Task endpoints
-@app.post("/chat/complete")
-async def chat_complete(request: CompleteRequest):
-    bot_id = request.bot_id
-    user_id = request.user_id
-    user_message = request.user_message
-    is_sync_request = request.is_sync_request
-
-    if not bot_id or not user_id or not user_message:
-        raise HTTPException(status_code=400, detail="Missing required fields")
-
-    logger.info(f"Chat request from user {user_id} to bot {bot_id}: {user_message}")
-
-    try:
-        if is_sync_request:
-            response = message_handler_task(bot_id, user_id, user_message)
-            return {"status": "completed", "response": response}
-        else:
-            response = message_handler_task.delay(bot_id, user_id, user_message)
-            return {"status": "processing", "task_id": response.id}
-    except Exception as e:
-        logger.error(f"Error processing chat request: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-@app.get("/chat/complete/{task_id}")
-async def get_chat_response(task_id: str):
-    start = time.time()
-    try:
-        while True:
-            task_result = AsyncResult(task_id)
-            task_status = task_result.status
-            if task_status == "PENDING" or task_status == "STARTED":
-                if time.time() - start > 60:
-                    return {
-                        "task_id": task_id,
-                        "status": task_result.status,
-                        "task_result": task_result.result,
-                        "error_message": "408 Request Timeout: The task is still pending after 60 seconds.",
-                    }
-                else:
-                    # Wait 0.5s before checking again
-                    await asyncio.sleep(0.5)
-            else:
-                return {
-                    "task_id": task_id,
-                    "status": task_result.status,
-                    "task_result": task_result.result,
-                }
-    except Exception as e:
-        logger.error(f"Error retrieving task {task_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-# Qdrant endpoints
-@app.post("/collections/create")
-def create_collection_endpoint(
-    collection_name: str = settings.default_collection_name,
-    vector_size: int = settings.vector_dimension,
-):
-    try:
-        status = create_collection(collection_name, vector_size)
-        return {"status": status}
-    except Exception as e:
-        logger.error(f"Error creating collection via endpoint: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-
-@app.post("/documents/create")
-def insert_document_endpoint(title: str, content: str):
-    try:
-        new_docs = insert_document(title, content)
-        doc_id = str(new_docs.id)
-        chunk_and_index_document.delay(doc_id, title, content)
-        return {
-            "status": "Document received and indexing started.",
-            "document_id": doc_id,
-        }
-    except Exception as e:
-        logger.error(f"Error inserting document via endpoint: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    return {
+        "message": f"Welcome to the {settings.app_name} API!",
+        "version": settings.app_version,
+        "docs": "/docs",
+        "routers": [
+            "/v1/health",
+            "/v1/rag",
+            "/v1/models",
+            "/v1/indexing",
+            "/v1/documents",
+            "/v1/audio",
+        ],
+    }

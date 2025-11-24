@@ -1,12 +1,32 @@
-import os
+import hashlib
+import json
+import uuid
+from typing import Any, Dict, List, Optional
 
 import redis
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
-from ..utils import generate_request_id
 
 settings = get_backend_settings()
+
+
+# Cache metrics
+def _get_cache_metrics():
+    """Get cache metrics from centralized metrics module"""
+    try:
+        from .metrics import cache_hits_total, cache_misses_total
+
+        return cache_hits_total, cache_misses_total
+    except ImportError:
+        return None, None
+
+
+def generate_request_id(max_length=32):
+    hash_string = str(uuid.uuid4())
+    h = hashlib.sha256()
+    h.update(hash_string.encode("utf-8"))
+    return h.hexdigest()[:max_length]
 
 
 def get_redis_client(host=None, port=None, db=None, password=None):
@@ -60,3 +80,182 @@ def delete_conversation_id(bot_id, user_id):
     except Exception as e:
         logger.error(f"Error deleting conversation ID in Redis: {e}")
         raise
+
+
+def _generate_cache_key(prefix: str, content: str) -> str:
+    content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+    return f"{prefix}:{content_hash}"
+
+
+def get_query_embedding(query: str) -> Optional[List[float]]:
+    key = _generate_cache_key("emb", query)
+    try:
+        client = get_redis_client()
+        cached = client.get(key)
+
+        # Get metrics counters
+        cache_hits_total, cache_misses_total = _get_cache_metrics()
+
+        if cached:
+            logger.debug(f"Cache HIT for embedding: {query[:50]}...")
+            if cache_hits_total:
+                cache_hits_total.labels(cache_type="embedding").inc()
+            result: List[float] = json.loads(cached)
+            return result
+
+        logger.debug(f"Cache MISS for embedding: {query[:50]}...")
+        if cache_misses_total:
+            cache_misses_total.labels(cache_type="embedding").inc()
+        return None
+    except Exception as e:
+        logger.warning(f"Error retrieving embedding from cache: {e}")
+        return None
+
+
+def cache_query_embedding(
+    query: str, embedding: List[float], ttl_seconds: int = 3600
+) -> bool:
+    key = _generate_cache_key("emb", query)
+    try:
+        client = get_redis_client()
+        client.setex(key, ttl_seconds, json.dumps(embedding))
+        logger.debug(f"Cached embedding for query: {query[:50]}...")
+        return True
+    except Exception as e:
+        logger.warning(f"Error caching embedding: {e}")
+        return False
+
+
+def get_search_results(
+    query: str, search_type: str = "hybrid"
+) -> Optional[List[Dict[str, Any]]]:
+    key = _generate_cache_key(f"search:{search_type}", query)
+    try:
+        client = get_redis_client()
+        cached = client.get(key)
+
+        # Get metrics counters
+        cache_hits_total, cache_misses_total = _get_cache_metrics()
+
+        if cached:
+            logger.debug(f"Cache HIT for {search_type} search: {query[:50]}...")
+            if cache_hits_total:
+                cache_hits_total.labels(cache_type="search").inc()
+            result: List[Dict[str, Any]] = json.loads(cached)
+            return result
+
+        logger.debug(f"Cache MISS for {search_type} search: {query[:50]}...")
+        if cache_misses_total:
+            cache_misses_total.labels(cache_type="search").inc()
+        return None
+    except Exception as e:
+        logger.warning(f"Error retrieving search results from cache: {e}")
+        return None
+
+
+def cache_search_results(
+    query: str,
+    results: List[Dict[str, Any]],
+    search_type: str = "hybrid",
+    ttl_seconds: int = 600,
+) -> bool:
+    key = _generate_cache_key(f"search:{search_type}", query)
+    try:
+        client = get_redis_client()
+        client.setex(key, ttl_seconds, json.dumps(results))
+        logger.debug(f"Cached {search_type} search results for query: {query[:50]}...")
+        return True
+    except Exception as e:
+        logger.warning(f"Error caching search results: {e}")
+        return False
+
+
+def invalidate_search_cache(document_id: Optional[int] = None) -> int:
+    try:
+        client = get_redis_client()
+        pattern = "search:*"
+        keys = client.keys(pattern)
+        if keys:
+            deleted: int = client.delete(*keys)
+            logger.info(f"Invalidated {deleted} search cache entries")
+            return deleted
+        return 0
+    except Exception as e:
+        logger.warning(f"Error invalidating search cache: {e}")
+        return 0
+
+
+def get_cache_stats() -> Dict[str, Any]:
+    try:
+        client = get_redis_client()
+        info = client.info("stats")
+
+        emb_keys = len(client.keys("emb:*"))
+        search_keys = len(client.keys("search:*"))
+        conv_keys = len(client.keys("*.*"))
+
+        return {
+            "total_keys": client.dbsize(),
+            "embedding_cache_keys": emb_keys,
+            "search_cache_keys": search_keys,
+            "conversation_keys": conv_keys,
+            "keyspace_hits": info.get("keyspace_hits", 0),
+            "keyspace_misses": info.get("keyspace_misses", 0),
+            "hit_rate": (
+                info.get("keyspace_hits", 0)
+                / (info.get("keyspace_hits", 0) + info.get("keyspace_misses", 1))
+                if (info.get("keyspace_hits", 0) + info.get("keyspace_misses", 0)) > 0
+                else 0.0
+            ),
+        }
+    except Exception as e:
+        logger.warning(f"Error getting cache stats: {e}")
+        return {"error": str(e)}
+
+
+# ============= GENERIC CACHE FUNCTIONS =============
+
+
+def get_cached_value(key: str) -> Optional[str]:
+    """
+    Get cached value from Redis by key.
+
+    Args:
+        key: Cache key
+
+    Returns:
+        Cached value as string, or None if not found
+    """
+    try:
+        client = get_redis_client()
+        cached = client.get(key)
+        if cached:
+            logger.debug(f"Cache HIT: {key[:50]}...")
+            return cached.decode("utf-8")
+        logger.debug(f"Cache MISS: {key[:50]}...")
+        return None
+    except Exception as e:
+        logger.warning(f"Error retrieving from cache: {e}")
+        return None
+
+
+def set_cached_value(key: str, value: str, expiration: int = 3600) -> bool:
+    """
+    Set cached value in Redis.
+
+    Args:
+        key: Cache key
+        value: Value to cache (string)
+        expiration: TTL in seconds (default: 1 hour)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        client = get_redis_client()
+        client.setex(key, expiration, value)
+        logger.debug(f"Cached value: {key[:50]}... (TTL: {expiration}s)")
+        return True
+    except Exception as e:
+        logger.warning(f"Error caching value: {e}")
+        return False

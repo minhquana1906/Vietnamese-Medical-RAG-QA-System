@@ -1,17 +1,188 @@
 from loguru import logger
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import (
+    ARRAY,
+    TIMESTAMP,
+    Boolean,
+    Column,
+    ForeignKey,
+    Integer,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import DeclarativeMeta, declarative_base
 from sqlalchemy.future import select
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from .configs.setup import get_backend_settings
-from .core.cache import get_conversation_id
 from .database import engine, get_db
 
 settings = get_backend_settings()
 
 
 Base: DeclarativeMeta = declarative_base()
+
+
+class User(Base):
+    """Chainlit User model - uses 'metadata_' to avoid SQLAlchemy reserved keyword"""
+
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    identifier = Column(Text, nullable=False, unique=True)
+    metadata_ = Column("metadata", JSONB, nullable=False)  # DB column is 'metadata'
+    createdAt = Column(Text, nullable=True)
+
+    # Relationships
+    threads = relationship(
+        "Thread", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class Thread(Base):
+    """Chainlit Thread model - uses 'metadata_' to avoid SQLAlchemy reserved keyword"""
+
+    __tablename__ = "threads"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    createdAt = Column(Text, nullable=True)
+    name = Column(Text, nullable=True)
+    userId = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    userIdentifier = Column(Text, nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+    metadata_ = Column("metadata", JSONB, nullable=True)  # DB column is 'metadata'
+
+    # Relationships
+    user = relationship("User", back_populates="threads")
+    steps = relationship("Step", back_populates="thread", cascade="all, delete-orphan")
+    elements = relationship(
+        "Element", back_populates="thread", cascade="all, delete-orphan"
+    )
+    feedbacks = relationship(
+        "Feedback", back_populates="thread", cascade="all, delete-orphan"
+    )
+
+
+class Step(Base):
+
+    __tablename__ = "steps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    name = Column(Text, nullable=False)
+    type = Column(Text, nullable=False)
+    threadId = Column(
+        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False
+    )
+    parentId = Column(UUID(as_uuid=True), nullable=True)
+    streaming = Column(Boolean, nullable=False)
+    waitForAnswer = Column(Boolean, nullable=True)
+    isError = Column(Boolean, nullable=True)
+    metadata_ = Column("metadata", JSONB, nullable=True)  # DB column is 'metadata'
+    tags = Column(ARRAY(Text), nullable=True)
+    input = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
+    createdAt = Column(Text, nullable=True)
+    command = Column(Text, nullable=True)
+    start = Column(Text, nullable=True)
+    end = Column(Text, nullable=True)
+    generation = Column(JSONB, nullable=True)
+    showInput = Column(Text, nullable=True)
+    language = Column(Text, nullable=True)
+    indent = Column(Integer, nullable=True)
+    defaultOpen = Column(Boolean, nullable=True)
+
+    # Relationships
+    thread = relationship("Thread", back_populates="steps")
+
+
+class Element(Base):
+
+    __tablename__ = "elements"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    threadId = Column(
+        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=True
+    )
+    type = Column(Text, nullable=True)
+    url = Column(Text, nullable=True)
+    chainlitKey = Column(Text, nullable=True)
+    name = Column(Text, nullable=False)
+    display = Column(Text, nullable=True)
+    objectKey = Column(Text, nullable=True)
+    size = Column(Text, nullable=True)
+    page = Column(Integer, nullable=True)
+    language = Column(Text, nullable=True)
+    forId = Column(UUID(as_uuid=True), nullable=True)
+    mime = Column(Text, nullable=True)
+    props = Column(JSONB, nullable=True)
+
+    # Relationships
+    thread = relationship("Thread", back_populates="elements")
+
+
+class Feedback(Base):
+
+    __tablename__ = "feedbacks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    forId = Column(UUID(as_uuid=True), nullable=False)
+    threadId = Column(
+        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False
+    )
+    value = Column(Integer, nullable=False)
+    comment = Column(Text, nullable=True)
+
+    # Relationships
+    thread = relationship("Thread", back_populates="feedbacks")
+
+
+class Document(Base):
+    """Document model - uses 'metadata_' to avoid SQLAlchemy reserved keyword"""
+
+    __tablename__ = "documents"
+
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    title = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    metadata_ = Column("metadata", JSONB, nullable=True)  # DB column is 'metadata'
+    createdAt = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    chunks = relationship(
+        "Chunk", back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class Chunk(Base):
+    """Chunk model - uses 'metadata_' to avoid SQLAlchemy reserved keyword"""
+
+    __tablename__ = "chunks"
+
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    documentId = Column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunkIndex = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    metadata_ = Column("metadata", JSONB, nullable=True)  # DB column is 'metadata'
+    createdAt = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    document = relationship("Document", back_populates="chunks")
+
+    __table_args__ = (
+        UniqueConstraint("documentId", "chunkIndex", name="uq_document_chunk_index"),
+    )
 
 
 def init_db():
@@ -23,91 +194,19 @@ def init_db():
         raise
 
 
-class ChatConversation(Base):
-    __tablename__ = "chat_conversations"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    conversation_id = Column(String(100), nullable=False, default="")
-    bot_id = Column(String(100), nullable=False, default="Meddy")
-    user_id = Column(String(100), nullable=False, default="user_1")
-    message = Column(Text, nullable=False)
-    is_request = Column(Boolean, nullable=False, default=True)
-    is_completed = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-
-class Document(Base):
-    __tablename__ = "documents"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(255), nullable=False)
-    content = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-
-# Chat conversation's messages
-def get_conversation_by_id(conversation_id):
+def insert_document(
+    title: str,
+    content: str,
+    metadata: dict = None,
+):
     with get_db() as db:
-        stmt = (
-            select(ChatConversation)
-            .where(ChatConversation.conversation_id == conversation_id)
-            .order_by(ChatConversation.created_at.asc())
+        new_doc = Document(
+            title=title,
+            content=content,
+            metadata_=metadata or {},  # Use metadata_ (Python attribute)
         )
-        conversations = db.execute(stmt).scalars().all()
-        # return rows with the same conversation's id. Each contains a message in the conversation
-        if conversations:
-            return conversations
-        else:
-            logger.warning(f"No conversation found with ID: {conversation_id}")
-            return None
-
-
-def update_conversation(bot_id, user_id, message, is_request=True):
-    with get_db() as db:
-        conversation_id = get_conversation_id(bot_id, user_id)
-        if conversation_id:
-            new_conversation = ChatConversation(
-                conversation_id=conversation_id,
-                bot_id=bot_id,
-                user_id=user_id,
-                message=message,
-                is_request=is_request,
-                is_completed=not is_request,
-            )
-            db.add(new_conversation)
-            db.commit()
-            db.refresh(new_conversation)
-            return conversation_id
-
-
-def convert_conversation_to_messages(conversation):
-    messages = [{"role": "system", "content": settings.system_prompt}]
-
-    for msg in conversation:
-        role = "user" if msg.is_request else "assistant"
-        messages.append({"role": role, "content": msg.message})
-
-    return messages
-
-
-def get_messages_from_conversation(conversation_id):
-    conversation = get_conversation_by_id(conversation_id)
-    if conversation:
-        return convert_conversation_to_messages(conversation)
-
-
-# document's CRUD operations
-def insert_document(title, content):
-    with get_db() as db:
-        new_doc = Document(title=title, content=content)
         db.add(new_doc)
         db.commit()
         db.refresh(new_doc)
-        logger.info(f"Inserted document {new_doc.title} with ID: {new_doc.id}")
+        logger.info(f"Inserted document '{new_doc.title}' with ID: {new_doc.id}")
         return new_doc

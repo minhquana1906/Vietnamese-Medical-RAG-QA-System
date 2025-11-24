@@ -23,7 +23,9 @@ COPY --from=builder --chown=app:app /app /app
 
 
 RUN mkdir /app/nltk_data && \
-    chown -R app:app /app/nltk_data
+    chown -R app:app /app/nltk_data && \
+    mkdir -p /tmp/audio && \
+    chown -R app:app /tmp/audio
 
 WORKDIR /app/backend
 

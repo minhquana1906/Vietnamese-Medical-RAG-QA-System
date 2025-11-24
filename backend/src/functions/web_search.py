@@ -29,6 +29,10 @@ def tavily_search(query):
             url = doc.get("url", "No URL available")
             title = doc.get("title", "Untitled")
 
+            logger.debug(
+                f"Source {i+1} - Title: {title}, URL: {url}, Content Length: {len(content)}"
+            )
+
             search_document += f"**Source {i+1}:**\n"
             search_document += f"- Title: {title}\n"
             search_document += f"- Content: {content}\n"

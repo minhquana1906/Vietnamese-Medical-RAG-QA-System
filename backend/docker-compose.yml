@@ -78,6 +78,8 @@ services:
     volumes:
       - nltk_data:/app/nltk_data
       - .:/app/backend
+      - huggingface_cache:/root/.cache/huggingface # Mount HF models cache
+      - audio_data:/tmp/audio # Shared audio files
     networks:
       - medical_rag_network
 
@@ -97,11 +99,13 @@ services:
       chatbot_api:
         condition: service_started
     user: root
-    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R 1000:1000 /app/logs/worker && su app -c 'celery -A src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log'"
+    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R 1000:1000 /app/logs/worker && su app -c 'celery -A src.tasks.celery_app worker --loglevel=info'"
     volumes:
       - .:/app/backend
       - worker_volume:/app/logs/worker
       - nltk_data:/app/nltk_data
+      - huggingface_cache:/root/.cache/huggingface # Mount HF models cache
+      - audio_data:/tmp/audio # Shared audio files
     networks:
       - medical_rag_network
 
@@ -115,3 +119,5 @@ volumes:
   elasticsearch_data:
   worker_volume:
   nltk_data:
+  huggingface_cache:
+  audio_data: # Shared volume for audio files
