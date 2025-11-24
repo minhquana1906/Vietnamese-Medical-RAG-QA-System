@@ -45,7 +45,13 @@ class Qwen3EmbeddingService:
             openai_fallback: Enable OpenAI fallback if local fails
             task_instruction: Custom task instruction (default: medical retrieval)
         """
-        self.local_url = local_url or settings.backend_api_url
+        # Auto-detect GPU service if enabled (prioritize GPU for performance)
+        if settings.qwen3_models_enabled:
+            self.local_url = local_url or settings.qwen3_models_url
+            logger.info(f"Using Qwen3 GPU service: {self.local_url}")
+        else:
+            self.local_url = local_url or settings.backend_api_url
+            logger.info(f"Using local CPU service: {self.local_url}")
         self.huggingface_model = get_embedding_model()
         self.task_instruction = task_instruction or self.DEFAULT_TASK_INSTRUCTION
 
@@ -180,12 +186,6 @@ class Qwen3EmbeddingService:
             f"Generated {len(documents)} document embeddings (batch size: {batch_size})"
         )
         return embeddings
-
-    def embed_batch(
-        self, texts: List[str], batch_size: int = 32, use_cache: bool = False
-    ) -> List[Optional[List[float]]]:
-        """Legacy method for backward compatibility (treats as documents)."""
-        return self.embed_batch_documents(texts, batch_size=batch_size)
 
     def _embed_with_local(
         self,

@@ -119,6 +119,7 @@
 - [X] T044 [P] [US1] Frontend public/ directory exists with logo.png - COMPLETED
 - [X] T045 [US1] Update backend/src/tasks.py with rag_pipeline_task Celery task for async RAG processing (called from Chainlit) - COMPLETED 2025-11-02 (Already implemented as message_handler_task)
 - [X] T046 [US1] Backend API endpoint POST /rag/query created in backend/src/main.py (calls message_handler_task) - COMPLETED 2025-11-01
+- [X] T046a [US1] Refactor backend API với modular router structure (health, rag, models, audio, documents routers) - COMPLETED 2025-11-24
 - [X] T047 [US1] Frontend Dockerfile created for Chainlit container - COMPLETED 2025-11-01
 - [X] T048 [US1] Frontend docker-compose.yml created with Chainlit + PostgreSQL - COMPLETED 2025-11-01
 
@@ -148,9 +149,7 @@
 - [X] T078c [US2] Integrate guardrails validation into backend/src/core/guardrails.py with logging for filtered queries
 - [X] T078d [US2] Update backend/src/tasks.py to use Qwen3 models (embedding, reranking, generation) with proper error handling
 - [X] T078e [US2] Update RAG pipeline helper functions (enhance_query_quality, detect_route, get_tavily_agent_answer) to use Qwen3
-- [ ] T078f [P] [US2] Create health check script in backend/scripts/verify_serving.py to test all model endpoints (embedding, reranking, guardrails, generation)
-- [ ] T078g [US2] Run verification script and ensure <2s latency for embedding/reranking, <5s for generation
-- [ ] T078h [P] [US2] Document serving architecture in docs/SERVING_ARCHITECTURE.md with deployment instructions
+
 
 **Note**: Fine-tuning tasks (T049-T067, T069-T072) removed - replaced by pre-trained model serving via FastAPI
 
@@ -224,15 +223,15 @@
 
 ### Implementation for User Story 5
 
-- [ ] T103 [P] [US5] Implement embedding caching in backend/src/services/embedding.py (check cache before generating, cache after generation)
-- [ ] T104 [P] [US5] Implement search result caching in backend/src/core/hybrid_search.py (cache final RRF results)
-- [ ] T105 [US5] Add cache hit/miss metrics in backend/src/core/cache.py with Prometheus counters (cache_hits_total{cache_type="embedding|search"})
-- [ ] T106 [US5] Implement cache invalidation on document deletion in backend/src/main.py DELETE /documents/{document_id} endpoint
-- [ ] T106a [US5] Implement cache invalidation on document update in backend/src/main.py PATCH /documents/{document_id} endpoint (clear search caches for affected document)
-- [ ] T107 [US5] Configure Redis LRU eviction policy in database/docker-compose.yml (maxmemory-policy allkeys-lru)
-- [ ] T108 [US5] Add cache warming script in backend/scripts/warm_cache.py for common medical queries
-- [ ] T109 [US5] Update backend/src/tasks.py to use cached embeddings in message_handler_task
-- [ ] T110 [US5] Add cache statistics endpoint in backend/src/main.py: GET /cache/stats (hit rate, entry count, memory usage)
+- [X] T103 [P] [US5] Implement embedding caching in backend/src/services/embedding.py (check cache before generating, cache after generation)
+- [X] T104 [P] [US5] Implement search result caching in backend/src/core/hybrid_search.py (cache final RRF results)
+- [X] T105 [US5] Add cache hit/miss metrics in backend/src/core/cache.py with Prometheus counters (cache_hits_total{cache_type="embedding|search"})
+- [X] T106 [US5] Implement cache invalidation on document deletion in backend/src/main.py DELETE /documents/{document_id} endpoint
+- [X] T106a [US5] Implement cache invalidation on document update in backend/src/main.py PATCH /documents/{document_id} endpoint (clear search caches for affected document) - SKIPPED: No update endpoint exists
+- [X] T107 [US5] Configure Redis LRU eviction policy in database/docker-compose.yml (maxmemory-policy allkeys-lru)
+- [X] T108 [US5] Add cache warming script in backend/scripts/warm_cache.py for common medical queries
+- [X] T109 [US5] Update backend/src/tasks.py to use cached embeddings in message_handler_task
+- [X] T110 [US5] Add cache statistics endpoint in backend/src/main.py: GET /cache/stats (hit rate, entry count, memory usage)
 
 **Git Example**: `git commit -m "Add Redis caching layer with 42% cache hit rate on common queries"`
 

@@ -166,8 +166,13 @@ def handle_rag_query(
     try:
         response = bot_route_answer_message(rag_history, query)
         logger.info(f"Generated response for thread {thread.id}")
+
+        # Safety check: handle None response
+        if response is None:
+            logger.error("RAG pipeline returned None - generation service unavailable")
+            response = "Xin lỗi, hệ thống AI đang tạm thời không khả dụng. Vui lòng thử lại sau vài phút."
     except Exception as e:
-        logger.error(f"Error in RAG pipeline: {e}")
+        logger.error(f"Error in RAG pipeline: {e}", exc_info=True)
         response = "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
 
     logger.info(f"RAG query completed: user={user_identifier}, thread={thread_id}")

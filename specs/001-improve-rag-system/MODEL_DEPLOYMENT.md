@@ -229,7 +229,7 @@ journalctl -u rag-backend -f | grep "Using active"
 
 ```bash
 # Test RAG query
-curl -X POST http://localhost:8000/v1/models/rag \
+curl -X POST http://localhost:8000/v1/rag \
   -H "Content-Type: application/json" \
   -d '{
     "user_identifier": "test_user",

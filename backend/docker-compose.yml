@@ -79,6 +79,7 @@ services:
       - nltk_data:/app/nltk_data
       - .:/app/backend
       - huggingface_cache:/root/.cache/huggingface # Mount HF models cache
+      - audio_data:/tmp/audio # Shared audio files
     networks:
       - medical_rag_network
 
@@ -104,6 +105,7 @@ services:
       - worker_volume:/app/logs/worker
       - nltk_data:/app/nltk_data
       - huggingface_cache:/root/.cache/huggingface # Mount HF models cache
+      - audio_data:/tmp/audio # Shared audio files
     networks:
       - medical_rag_network
 
@@ -118,3 +120,4 @@ volumes:
   worker_volume:
   nltk_data:
   huggingface_cache:
+  audio_data: # Shared volume for audio files

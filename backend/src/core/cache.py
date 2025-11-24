@@ -11,6 +11,17 @@ from ..configs.setup import get_backend_settings
 settings = get_backend_settings()
 
 
+# Cache metrics
+def _get_cache_metrics():
+    """Get cache metrics from centralized metrics module"""
+    try:
+        from .metrics import cache_hits_total, cache_misses_total
+
+        return cache_hits_total, cache_misses_total
+    except ImportError:
+        return None, None
+
+
 def generate_request_id(max_length=32):
     hash_string = str(uuid.uuid4())
     h = hashlib.sha256()
@@ -81,11 +92,20 @@ def get_query_embedding(query: str) -> Optional[List[float]]:
     try:
         client = get_redis_client()
         cached = client.get(key)
+
+        # Get metrics counters
+        cache_hits_total, cache_misses_total = _get_cache_metrics()
+
         if cached:
             logger.debug(f"Cache HIT for embedding: {query[:50]}...")
+            if cache_hits_total:
+                cache_hits_total.labels(cache_type="embedding").inc()
             result: List[float] = json.loads(cached)
             return result
+
         logger.debug(f"Cache MISS for embedding: {query[:50]}...")
+        if cache_misses_total:
+            cache_misses_total.labels(cache_type="embedding").inc()
         return None
     except Exception as e:
         logger.warning(f"Error retrieving embedding from cache: {e}")
@@ -113,11 +133,20 @@ def get_search_results(
     try:
         client = get_redis_client()
         cached = client.get(key)
+
+        # Get metrics counters
+        cache_hits_total, cache_misses_total = _get_cache_metrics()
+
         if cached:
             logger.debug(f"Cache HIT for {search_type} search: {query[:50]}...")
+            if cache_hits_total:
+                cache_hits_total.labels(cache_type="search").inc()
             result: List[Dict[str, Any]] = json.loads(cached)
             return result
+
         logger.debug(f"Cache MISS for {search_type} search: {query[:50]}...")
+        if cache_misses_total:
+            cache_misses_total.labels(cache_type="search").inc()
         return None
     except Exception as e:
         logger.warning(f"Error retrieving search results from cache: {e}")

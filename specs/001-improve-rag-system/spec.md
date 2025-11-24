@@ -144,6 +144,46 @@ The system undergoes stress testing and load testing to validate performance cha
 - What happens during database schema migrations for the new Chainlit-compatible structure?
 - How does hybrid search degrade when one search modality (vector or keyword) fails?
 
+## API Router Architecture
+
+**Router Organization** (2025-11-24):
+
+Backend API được tổ chức theo **modular router pattern** với 5 routers chính:
+
+### 1. Health Router (`/v1/*`)
+- `GET /v1/ready`: Readiness probe cho Kubernetes/Docker
+- `GET /v1/health`: Comprehensive health check (database, cache, API status)
+- `GET /v1/cache/stats`: Cache performance metrics (hit rate, memory usage)
+
+### 2. RAG Router (`/v1/rag`)
+- `POST /v1/rag`: Main RAG query endpoint (query → retrieval → reranking → generation)
+
+### 3. Models Router (`/v1/models`)
+- `POST /v1/models/embed`: Generate Qwen3 embeddings (routes to GPU service)
+- `POST /v1/models/rerank`: Rerank documents with Qwen3-Reranker (routes to GPU service)
+- `POST /v1/models/guard`: Content safety check with Qwen3Guard (routes to GPU service)
+
+### 4. Audio Router (`/v1/models` + `/v1/rag/audio`)
+- `POST /v1/models/stt`: Speech-to-text (Whisper-turbo batch inference on GPU)
+- `POST /v1/models/tts`: Text-to-speech (ElevenLabs API)
+- `POST /v1/rag/audio`: End-to-end speech-to-speech RAG (STT → RAG → TTS)
+- `GET /v1/audio/{filename}`: Serve generated audio files
+
+### 5. Documents Router (`/v1/documents` + `/v1/indexing`)
+- `GET /v1/documents/list`: List documents with pagination and filtering
+- `POST /v1/documents/create`: Create document manually
+- `GET /v1/documents/{document_id}`: Get document details with chunks
+- `DELETE /v1/documents/{document_id}`: Delete document from all stores
+- `POST /v1/indexing/ingest-dataset`: Ingest HuggingFace dataset
+- `GET /v1/indexing/jobs/{job_id}`: Check indexing job status
+- `POST /v1/indexing/reindex-document/{document_id}`: Reindex specific document
+
+**Benefits**:
+- Clear separation of concerns (mỗi router quản lý 1 domain riêng)
+- Easy to test và maintain (mỗi router file độc lập)
+- Scalable architecture (thêm router mới không ảnh hưởng code cũ)
+- Auto-generated OpenAPI documentation (FastAPI tự động group endpoints theo router tags)
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements

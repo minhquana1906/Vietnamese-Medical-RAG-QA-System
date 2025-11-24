@@ -37,6 +37,23 @@ class SystemHealthResponse(BaseModel):
     cache: HealthCheckResponse = Field(..., description="Cache health status")
 
 
+class CacheStatisticsResponse(BaseModel):
+    """Cache statistics and performance metrics"""
+
+    total_keys: int = Field(..., description="Total number of keys in cache")
+    embedding_cache_keys: int = Field(
+        ..., description="Number of embedding cache entries"
+    )
+    search_cache_keys: int = Field(..., description="Number of search cache entries")
+    conversation_keys: int = Field(
+        ..., description="Number of conversation cache entries"
+    )
+    keyspace_hits: int = Field(..., description="Total cache hits")
+    keyspace_misses: int = Field(..., description="Total cache misses")
+    hit_rate: float = Field(..., description="Cache hit rate (0.0-1.0)")
+    memory_used: Optional[str] = Field(None, description="Memory usage (if available)")
+
+
 class EmbedRequest(BaseModel):
     """Qwen3-Embedding request with instruction-awareness"""
 
@@ -106,6 +123,12 @@ class IngestDatasetRequest(BaseModel):
     )
     max_documents: Optional[int] = Field(
         None, description="Limit number of documents to ingest (for testing)"
+    )
+    batch_size: int = Field(
+        512,
+        description="Number of documents to process in each batch (affects DB commit frequency and memory usage)",
+        ge=1,
+        le=1000,
     )
 
 
@@ -193,3 +216,70 @@ class ReindexDocumentResponse(BaseModel):
     job_id: str
     status: str
     message: str
+
+
+# Audio/Speech Schemas
+
+
+class SttRequest(BaseModel):
+    """Speech-to-Text request (via file upload)"""
+
+    # File will be uploaded via multipart/form-data
+    language: Optional[str] = Field(
+        "vi", description="Language code (default: Vietnamese)"
+    )
+
+
+class SttResponse(BaseModel):
+    """Speech-to-Text response"""
+
+    text: str = Field(..., description="Transcribed text")
+    language: str = Field(..., description="Detected/specified language")
+    duration: float = Field(..., description="Audio duration in seconds")
+    cached: bool = Field(False, description="Whether result was from cache")
+
+
+class TtsRequest(BaseModel):
+    """Text-to-Speech request"""
+
+    text: str = Field(
+        ..., description="Text to synthesize", min_length=1, max_length=5000
+    )
+    voice_id: Optional[str] = Field(
+        None, description="Voice identifier (uses default if None)"
+    )
+    model_id: str = Field("eleven_turbo_v2_5", description="TTS model identifier")
+    stability: float = Field(0.5, ge=0.0, le=1.0, description="Voice stability")
+    similarity_boost: float = Field(
+        0.75, ge=0.0, le=1.0, description="Clarity/similarity boost"
+    )
+    speed: float = Field(1.0, ge=0.5, le=2.0, description="Speech speed multiplier")
+
+
+class TtsResponse(BaseModel):
+    """Text-to-Speech response (audio returned as file)"""
+
+    message: str = Field(..., description="Status message")
+    audio_size: int = Field(..., description="Audio file size in bytes")
+    cached: bool = Field(False, description="Whether result was from cache")
+
+
+class AudioRagRequest(BaseModel):
+    """Combined Speech-to-Speech RAG request (via file upload)"""
+
+    # Audio file uploaded via multipart/form-data
+    user_identifier: str = Field(..., description="User identifier")
+    thread_id: str = Field(..., description="Thread/conversation ID")
+    language: Optional[str] = Field("vi", description="STT language code")
+    voice_id: Optional[str] = Field(None, description="TTS voice identifier")
+
+
+class AudioRagResponse(BaseModel):
+    """Combined Speech-to-Speech RAG response"""
+
+    thread_id: str = Field(..., description="Thread ID")
+    transcript: str = Field(..., description="Transcribed user query")
+    response: str = Field(..., description="Assistant's text response")
+    sources: Optional[List[Dict]] = Field(None, description="Source documents")
+    metadata: Optional[Dict] = Field(None, description="Processing metadata")
+    # Audio response returned as file attachment

@@ -81,9 +81,16 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
         section_title = metadata.get("section_title")
         page_number = metadata.get("page_number")
 
-        for chunk_index, node in enumerate(nodes):
-            # Use Qwen3 embedding service for documents (NO instruction prefix)
-            embedding = embedding_service.embed_document(node.text)
+        # OPTIMIZATION: Generate embeddings in batch for better performance
+        logger.info(f"Generating embeddings for {len(nodes)} chunks in batch...")
+        chunk_texts = [node.text for node in nodes]
+        batch_embeddings = embedding_service.embed_batch_documents(
+            documents=chunk_texts,
+            batch_size=512,  # Large batch size for dataset ingestion
+        )
+        logger.info(f"✅ Generated {len(batch_embeddings)} embeddings in batch")
+
+        for chunk_index, (node, embedding) in enumerate(zip(nodes, batch_embeddings)):
             if not embedding:
                 logger.warning(
                     f"Failed to generate embedding for chunk {chunk_index}: {node.text[:50]}..."
@@ -223,12 +230,16 @@ def bot_route_answer_message(history, question):
     if route == "medical":
         return rag_qa_task(history, question)
     elif route == "general":
-        return qwen3_chat_complete(
+        response = qwen3_chat_complete(
             messages=history + [{"role": "user", "content": question}],
             temperature=0.7,
             max_tokens=1024,
-            use_fallback=False,
+            use_fallback=True,  # Enable fallback to prevent None return
         )
+        # Fallback to safe message if still None
+        if response is None:
+            return "Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau."
+        return response
 
 
 @shared_task(
@@ -364,7 +375,7 @@ def rag_qa_task(self, history, question):
         # Check if RAG results have sufficient confidence. If best score is too low, use web search
         use_web_search = False
         if not reranked_results or (
-            reranked_results and reranked_results[0]["relevance_score"] < 0.005
+            reranked_results and reranked_results[0]["relevance_score"] < 0.5
         ):
             logger.info(
                 f"⚠️  RAG confidence low (best score: {reranked_results[0]['relevance_score'] if reranked_results else 0:.3f}), "
@@ -531,14 +542,15 @@ def ingest_dataset_task(
     split: str = "train",
     doc_type: str = None,
     max_documents: int = None,
+    batch_size: int = 10,  # NEW: Process documents in batches
 ):
     """
     Load a HuggingFace dataset and index all documents to Qdrant + Elasticsearch.
 
-    Implements:
-    - T093: Dataset ingestion with progress tracking
-    - T099: Progress tracking using task.update_state
-    - T102a: Incremental update logic (hash checking)
+    OPTIMIZATIONS:
+    - Batch database commits (reduce DB overhead)
+    - Batch embedding generation (already in chunk_and_index_document)
+    - Batch Elasticsearch indexing (via bulk API)
 
     Args:
         dataset_name: HuggingFace dataset identifier
@@ -546,6 +558,7 @@ def ingest_dataset_task(
         split: Dataset split to load (default: "train")
         doc_type: Document type for all documents
         max_documents: Limit number of documents (for testing)
+        batch_size: Number of documents to process in each batch (default: 10)
 
     Returns:
         dict: {
@@ -565,7 +578,9 @@ def ingest_dataset_task(
     chunks_indexed = 0
 
     try:
-        logger.info(f"Starting dataset ingestion: {dataset_name} (split={split})")
+        logger.info(
+            f"Starting dataset ingestion: {dataset_name} (split={split}, batch_size={batch_size})"
+        )
 
         # Update state to running
         self.update_state(
@@ -585,6 +600,9 @@ def ingest_dataset_task(
             len(dataset) if max_documents is None else min(len(dataset), max_documents)
         )
         logger.info(f"Dataset loaded: {total_docs} documents to process")
+
+        # OPTIMIZATION 1: Process documents in batches
+        document_batch = []
 
         with SessionLocal() as db:
             for idx, item in enumerate(dataset):
@@ -639,53 +657,83 @@ def ingest_dataset_task(
                     if key not in ["title", "text", "content", "question", "answer"]:
                         metadata[key] = value
 
-                # Create document in database
-                new_doc = Document(
-                    title=title,
-                    content=content,
-                    metadata_=metadata,
-                )
-                db.add(new_doc)
-                db.commit()
-                db.refresh(new_doc)
-
-                # Chunk and index document with metadata
-                logger.info(
-                    f"Chunking and indexing document {idx+1}/{total_docs}: {title[:50]}"
-                )
-                chunk_result = chunk_and_index_document(
-                    str(new_doc.id),
-                    title,
-                    content,
-                    metadata=metadata,  # Pass metadata to chunking function
+                # Add to batch
+                document_batch.append(
+                    {
+                        "title": title,
+                        "content": content,
+                        "metadata": metadata,
+                        "idx": idx,
+                    }
                 )
 
-                # Update document as indexed with timestamp (T102b)
-                from datetime import datetime
+                # OPTIMIZATION 2: Process batch when full or at end
+                if len(document_batch) >= batch_size or idx == len(dataset) - 1:
+                    logger.info(
+                        f"Processing batch of {len(document_batch)} documents..."
+                    )
 
-                new_doc.metadata_["is_indexed"] = True
-                new_doc.metadata_["indexed_at"] = datetime.utcnow().isoformat()
-                db.commit()
+                    # Create documents in database (batch commit)
+                    new_docs = []
+                    for doc_data in document_batch:
+                        new_doc = Document(
+                            title=doc_data["title"],
+                            content=doc_data["content"],
+                            metadata_=doc_data["metadata"],
+                        )
+                        db.add(new_doc)
+                        new_docs.append((new_doc, doc_data))
 
-                documents_indexed += 1
-                chunks_indexed += chunk_result.get("chunks_created", 0)
+                    # OPTIMIZATION 3: Single commit for batch
+                    db.commit()
 
-                # Update progress
-                self.update_state(
-                    state="PROGRESS",
-                    meta={
-                        "documents_processed": documents_indexed,
-                        "total_documents": total_docs,
-                        "chunks_created": chunks_indexed,
-                    },
-                )
+                    # Refresh all documents to get IDs
+                    for new_doc, _ in new_docs:
+                        db.refresh(new_doc)
 
-                # Log progress every 10 documents
-                if (idx + 1) % 10 == 0:
+                    logger.info(f"✅ Committed {len(new_docs)} documents to database")
+
+                    # Chunk and index each document (embedding is already batched inside)
+                    for new_doc, doc_data in new_docs:
+                        logger.info(
+                            f"Chunking and indexing document {doc_data['idx']+1}/{total_docs}: {doc_data['title'][:50]}"
+                        )
+                        chunk_result = chunk_and_index_document(
+                            str(new_doc.id),
+                            doc_data["title"],
+                            doc_data["content"],
+                            metadata=doc_data["metadata"],
+                        )
+
+                        # Update document as indexed with timestamp (T102b)
+                        from datetime import datetime
+
+                        new_doc.metadata_["is_indexed"] = True
+                        new_doc.metadata_["indexed_at"] = datetime.utcnow().isoformat()
+
+                        documents_indexed += 1
+                        chunks_indexed += chunk_result.get("chunks_created", 0)
+
+                    # OPTIMIZATION 4: Batch commit for status updates
+                    db.commit()
+
+                    # Update progress
+                    self.update_state(
+                        state="PROGRESS",
+                        meta={
+                            "documents_processed": documents_indexed,
+                            "total_documents": total_docs,
+                            "chunks_created": chunks_indexed,
+                        },
+                    )
+
                     logger.info(
                         f"Progress: {documents_indexed}/{total_docs} documents, "
                         f"{chunks_indexed} chunks created"
                     )
+
+                    # Clear batch
+                    document_batch = []
 
         duration = time.time() - start_time
 

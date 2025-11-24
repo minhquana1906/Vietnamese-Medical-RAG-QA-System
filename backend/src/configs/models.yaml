@@ -22,12 +22,27 @@ models:
     active: "Qwen/Qwen3Guard-Gen-0.6B"  # Default base model
     threshold: 0.7  # Safety threshold
     description: "Content safety guardrails"
+  
+  # Speech-to-Text model (faster-whisper on GPU service)
+  stt:
+    active: "small"  # Whisper-turbo for best speed/quality
+    device: "cuda"  # Always use GPU via qwen3_models service
+    compute_type: "float16"  # FP16 for GPU
+    batch_size: 16  # Batch inference for better GPU utilization
+    description: "Speech-to-text transcription with Whisper-small on GPU"
+  
+  # Text-to-Speech (ElevenLabs API)
+  tts:
+    provider: "elevenlabs"  # elevenlabs
+    voice_id: "A5w1fw5x0uXded1LDvZp" 
+    model_id: "eleven_turbo_v2_5"  # ElevenLabs model
+    description: "Text-to-speech synthesis"
 
 # Model serving endpoints
 serving:
-  vllm_url: "http://vllm:8000"  
-  vllm_api_key: "vllm"
-  # vllm_url: "http://171.248.248.17:47311"  
-  # vllm_api_key: "1a9793879f4ca1f83642194bf3169d068d9f91c8f4791eaad5f0397554f43674"
+  # vllm_url: "http://vllm:8000"  
+  # vllm_api_key: "vllm"
+  vllm_url: "http://120.238.149.198:33797"  
+  vllm_api_key: "fd833a7d0b6088b813ce3d417ae4ae3360ef7b3c3efc808ac9e21cf707a3e9ba"
   local_models: true  
   
