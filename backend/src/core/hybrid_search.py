@@ -84,7 +84,7 @@ def hybrid_search(
         if cached_results:
             # Increment metrics for hybrid search (cache hit)
             try:
-                from ..main import (
+                from .metrics import (
                     rag_search_requests_total,
                     rag_search_duration_seconds,
                 )
@@ -128,7 +128,7 @@ def hybrid_search(
 
     # Increment metrics for hybrid search
     try:
-        from ..main import rag_search_requests_total, rag_search_duration_seconds
+        from .metrics import rag_search_requests_total, rag_search_duration_seconds
 
         rag_search_requests_total.labels(search_type="hybrid").inc()
         rag_search_duration_seconds.labels(search_type="hybrid").observe(

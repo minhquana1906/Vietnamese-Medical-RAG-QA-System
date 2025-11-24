@@ -47,7 +47,13 @@ class Qwen3RerankerService:
             cohere_fallback: Enable Cohere fallback if local fails
             task_instruction: Custom task instruction (default: medical retrieval)
         """
-        self.local_url = local_url or settings.backend_api_url
+        # Auto-detect GPU service if enabled (prioritize GPU for performance)
+        if settings.qwen3_models_enabled:
+            self.local_url = local_url or settings.qwen3_models_url
+            logger.info(f"Using Qwen3 GPU service: {self.local_url}")
+        else:
+            self.local_url = local_url or settings.backend_api_url
+            logger.info(f"Using local CPU service: {self.local_url}")
         self.huggingface_model = get_reranking_model()
         self.task_instruction = task_instruction or self.DEFAULT_TASK_INSTRUCTION
 

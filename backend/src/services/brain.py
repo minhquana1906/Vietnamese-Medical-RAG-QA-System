@@ -105,7 +105,11 @@ def qwen3_chat_complete(
             logger.debug(f"Generated {len(content)} chars")
             return content
     except Exception as e:
-        logger.warning(f"❌ Remote vLLM failed ({model}): {e}")
+        # Truncate error message if it's HTML (vLLM loading page)
+        error_msg = str(e)
+        if "<!DOCTYPE html>" in error_msg or "<html" in error_msg:
+            error_msg = "vLLM service is loading (HTML response received)"
+        logger.warning(f"❌ Remote vLLM failed ({model}): {error_msg}")
 
     # Fallback to OpenAI
     if use_fallback:

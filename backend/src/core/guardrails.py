@@ -61,7 +61,13 @@ class Qwen3GuardService:
             local_url: Local FastAPI backend URL (defaults to settings.backend_api_url)
             threshold: Safety threshold (not used in Qwen3Guard, kept for compatibility)
         """
-        self.local_url = local_url or settings.backend_api_url
+        # Auto-detect GPU service if enabled (prioritize GPU for performance)
+        if settings.qwen3_models_enabled:
+            self.local_url = local_url or settings.qwen3_models_url
+            logger.info(f"Using Qwen3 GPU service: {self.local_url}")
+        else:
+            self.local_url = local_url or settings.backend_api_url
+            logger.info(f"Using local CPU service: {self.local_url}")
         self.threshold = threshold or get_guardrails_threshold()
         self.huggingface_model = get_guardrails_model()
 

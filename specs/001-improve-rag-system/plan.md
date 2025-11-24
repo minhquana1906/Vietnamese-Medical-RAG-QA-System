@@ -131,9 +131,16 @@ backend/
 ├── src/
 │   ├── models.py                    # SQLAlchemy models (User, ChatSession, Message, Document, Chunk)
 │   ├── database.py                  # Database connection and session management
-│   ├── main.py                      # FastAPI app with updated endpoints
+│   ├── main.py                      # FastAPI app (startup logic + router registration)
 │   ├── tasks.py                     # Celery tasks (RAG pipeline, indexing)
 │   ├── utils.py                     # Helper utilities
+│   ├── routers/                     # NEW (2025-11-24): Modular API routers
+│   │   ├── __init__.py
+│   │   ├── health.py                # Health check + cache stats endpoints
+│   │   ├── rag.py                   # RAG query endpoint
+│   │   ├── models.py                # Model inference endpoints (embed, rerank, guard)
+│   │   ├── audio.py                 # Speech-to-speech endpoints (STT, TTS, Audio RAG)
+│   │   └── documents.py             # Document management + indexing endpoints
 │   ├── configs/
 │   │   ├── __init__.py
 │   │   ├── setup.py                 # Settings (updated for new stack)
