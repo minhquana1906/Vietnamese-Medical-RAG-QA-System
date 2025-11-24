@@ -223,15 +223,34 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
 
 
 @shared_task()
-def bot_route_answer_message(history, question):
+def bot_route_answer_message(history, question, system_prompt=None):
+    """
+    Route user message to appropriate handler (medical RAG or general chat).
+
+    Args:
+        history: Conversation history
+        question: User question
+        system_prompt: Custom system prompt (optional, defaults to settings.system_prompt)
+
+    Returns:
+        str: Generated response
+    """
     # detect the route
     route = detect_route(history, question)
     logger.info(f"Bot route: {route}")
     if route == "medical":
-        return rag_qa_task(history, question)
+        return rag_qa_task(history, question, system_prompt=system_prompt)
     elif route == "general":
         response = qwen3_chat_complete(
-            messages=history + [{"role": "user", "content": question}],
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                    or "Bạn là Meddy - Trợ lý y tế thông minh cho người Việt.",
+                }
+            ]
+            + history
+            + [{"role": "user", "content": question}],
             temperature=0.7,
             max_tokens=1024,
             use_fallback=True,  # Enable fallback to prevent None return
@@ -248,7 +267,7 @@ def bot_route_answer_message(history, question):
     soft_time_limit=180,  # 3 minutes soft timeout
     max_retries=0,  # No automatic retries
 )
-def rag_qa_task(self, history, question):
+def rag_qa_task(self, history, question, system_prompt=None):
     """
     RAG QA task with Qwen3Guard input/output validation.
 
@@ -264,6 +283,7 @@ def rag_qa_task(self, history, question):
         self: Celery task instance (for cancellation check)
         history: Conversation history
         question: User question
+        system_prompt: Custom system prompt (optional, uses settings.system_prompt if None)
     """
     try:
         # ============================================
@@ -399,7 +419,9 @@ def rag_qa_task(self, history, question):
         # Build the message chain with intelligent history management
         from .services.summarizer import summarize_old_messages
 
-        messages = [{"role": "system", "content": settings.system_prompt}]
+        # Use custom system_prompt if provided, otherwise use default from settings
+        prompt = system_prompt or settings.system_prompt
+        messages = [{"role": "system", "content": prompt}]
 
         history_with_system = messages + history
         optimized_history = summarize_old_messages(

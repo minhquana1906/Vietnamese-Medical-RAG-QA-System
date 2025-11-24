@@ -124,20 +124,25 @@ class ModelRegistry:
             logger.info(f"✅ Guardrails model loaded on {self.device}")
 
             # Load Whisper STT model with batch inference
-            logger.info("📦 Loading Whisper-small for STT...")
-            stt_model_name = os.getenv("STT_MODEL", "small")
-            compute_type = "float16" if self.device == "cuda" else "int8"
+            logger.info("📦 Loading Whisper-turbo for STT...")
+            stt_model_name = os.getenv("STT_MODEL", "turbo")
+
+            # Allow forcing STT device (e.g. to "cpu" to avoid cuDNN issues)
+            stt_device = os.getenv("STT_DEVICE", self.device)
+            compute_type = "float16" if stt_device == "cuda" else "int8"
+
+            logger.info(f"🎤 STT Device: {stt_device}, Compute Type: {compute_type}")
 
             self.whisper_model = WhisperModel(
                 stt_model_name,
-                device=self.device,
+                device=stt_device,
                 compute_type=compute_type,
             )
 
             # Wrap in batched inference pipeline for better performance
             self.batched_whisper = BatchedInferencePipeline(model=self.whisper_model)
             logger.info(
-                f"✅ Whisper-small loaded on {self.device} with compute_type={compute_type}"
+                f"✅ Whisper-turbo loaded on {self.device} with compute_type={compute_type}"
             )
 
             self.loaded = True
@@ -517,7 +522,7 @@ async def stt_endpoint(
             )
 
         # Transcribe with batched inference
-        logger.info(f"🎤 Transcribing with Whisper-small (batch_size={batch_size})...")
+        logger.info(f"🎤 Transcribing with Whisper-turbo (batch_size={batch_size})...")
 
         segments, info = registry.batched_whisper.transcribe(
             str(audio_path),

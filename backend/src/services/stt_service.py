@@ -29,7 +29,7 @@ class SttService:
 
     def __init__(
         self,
-        model_name: str = "small",
+        model_name: str = "turbo",
         device: str = "cuda",
         compute_type: str = "float16",
     ):
@@ -257,7 +257,7 @@ def get_stt_service() -> SttService:
 
 
 def initialize_stt_service(
-    model_name: str = "small",
+    model_name: str = "turbo",
     device: str = "cuda",
     compute_type: str = "float16",
 ):

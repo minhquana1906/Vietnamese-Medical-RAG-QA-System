@@ -82,7 +82,7 @@ def on_startup():
 
             # STT now routes to GPU service, just initialize the proxy
             initialize_stt_service(
-                model_name=stt_config.get("active", "small"),
+                model_name=stt_config.get("active", "turbo"),
                 device=stt_config.get("device", "cuda"),
                 compute_type=stt_config.get("compute_type", "float16"),
             )

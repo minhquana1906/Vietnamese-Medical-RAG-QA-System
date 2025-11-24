@@ -10,6 +10,8 @@ from .prompt_templates import (
     RAG_PROMPT,
     REWRITE_USER_PROMPT,
     SYSTEM_PROMPT,
+    SPEECH_RAG_PROMPT,
+    SPEECH_RAG_SYSTEM_PROMPT,
 )
 
 load_dotenv()
@@ -26,6 +28,22 @@ class BackendSettings(BaseSettings):
     cohere_api_key: str = Field(default=os.getenv("COHERE_API_KEY", ""))
     tavily_api_key: str = Field(default=os.getenv("TAVILY_API_KEY", ""))
     hf_token: str = Field(default=os.getenv("HF_TOKEN", ""))
+
+    # TTS Configuration (ElevenLabs)
+    elevenlabs_api_key: str = Field(default=os.getenv("ELEVENLABS_API_KEY", ""))
+    elevenlabs_voice_id: str = Field(
+        default=os.getenv("ELEVENLABS_VOICE_ID", "1rqNHUqUbBGpY3OyzPMI")
+    )
+    elevenlabs_model_id: str = Field(
+        default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    )
+    elevenlabs_stability: float = Field(
+        default=float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    )
+    elevenlabs_similarity_boost: float = Field(
+        default=float(os.getenv("ELEVENLABS_SIMILARITY_BOOST", "0.75"))
+    )
+    elevenlabs_speed: float = Field(default=float(os.getenv("ELEVENLABS_SPEED", "1.0")))
 
     # Elasticsearch (BM25 keyword search)
     elasticsearch_host: str = Field(
@@ -119,6 +137,9 @@ class BackendSettings(BaseSettings):
     # Prompt templates
     system_prompt: str = Field(default=SYSTEM_PROMPT)
     rag_prompt: str = Field(default=RAG_PROMPT)
+    speech_rag_system_prompt: str = Field(default=SPEECH_RAG_SYSTEM_PROMPT)
+    speech_rag_prompt: str = Field(default=SPEECH_RAG_PROMPT)
+
     rewrite_prompt: str = Field(default=REWRITE_USER_PROMPT)
     intent_detection_prompt: str = Field(default=INTENT_DETECTION_PROMPT)
 

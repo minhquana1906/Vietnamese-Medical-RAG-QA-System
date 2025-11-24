@@ -11,11 +11,14 @@ from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from ..schemas.schema import SttResponse, TtsRequest, AudioRagResponse, RAGQueryRequest
+from ..schemas.schema import SttResponse, TtsRequest, AudioRagResponse
 from ..services.stt_service import SttService
 from ..services.tts_service import TtsService
-from ..services.rag_service import handle_rag_query
+from ..services.rag_service import handle_speech_rag_query
 from ..database import get_db_session
+from ..configs.setup import get_backend_settings
+
+settings = get_backend_settings()
 
 router = APIRouter(prefix="/v1", tags=["Audio & Speech"])
 
@@ -100,8 +103,23 @@ async def text_to_speech(request: TtsRequest):
         tts_service = TtsService()
         audio_bytes = await tts_service.synthesize_speech(
             text=request.text,
-            voice_id=request.voice_id,
-            model_id=request.model_id,
+            voice_id=request.voice_id or settings.elevenlabs_voice_id,
+            model_id=request.model_id or settings.elevenlabs_model_id,
+            stability=(
+                request.stability
+                if request.stability is not None
+                else settings.elevenlabs_stability
+            ),
+            similarity_boost=(
+                request.similarity_boost
+                if request.similarity_boost is not None
+                else settings.elevenlabs_similarity_boost
+            ),
+            speed=(
+                request.speed
+                if request.speed is not None
+                else settings.elevenlabs_speed
+            ),
         )
 
         duration = time.time() - start_time
@@ -170,12 +188,12 @@ def audio_rag_query(
         # Cleanup audio
         audio_path.unlink(missing_ok=True)
 
-        # Step 2: RAG Query
-        logger.info("Step 2/3: Processing RAG query...")
+        # Step 2: RAG Query (using Speech-optimized prompt)
+        logger.info("Step 2/3: Processing Speech RAG query...")
         rag_start = time.time()
 
-        # Call RAG service with DB session
-        response_text, sources = handle_rag_query(
+        # Call Speech RAG service with DB session (uses SPEECH_RAG_SYSTEM_PROMPT)
+        response_text, sources = handle_speech_rag_query(
             db=db,
             user_identifier=user_identifier,
             thread_id=thread_id,
@@ -183,7 +201,7 @@ def audio_rag_query(
         )
 
         rag_duration = time.time() - rag_start
-        logger.info(f"✅ RAG completed in {rag_duration:.3f}s")
+        logger.info(f"✅ Speech RAG completed in {rag_duration:.3f}s")
 
         # Step 3: Text-to-Speech
         logger.info("Step 3/3: Synthesizing speech...")
@@ -196,7 +214,11 @@ def audio_rag_query(
         audio_bytes = asyncio.run(
             tts_service.synthesize_speech(
                 text=response_text,
-                voice_id=voice_id,
+                voice_id=voice_id or settings.elevenlabs_voice_id,
+                model_id=settings.elevenlabs_model_id,
+                stability=settings.elevenlabs_stability,
+                similarity_boost=settings.elevenlabs_similarity_boost,
+                speed=settings.elevenlabs_speed,
             )
         )
 
@@ -213,9 +235,10 @@ def audio_rag_query(
         total_duration = time.time() - start_time
 
         return AudioRagResponse(
+            thread_id=thread_id,  # ✅ Added missing field
             transcript=transcript,
             response=response_text,
-            audio_url=f"/audio/{output_audio_path.name}",
+            audio_url=f"/v1/audio/{output_audio_path.name}",  # ✅ Fixed: Added /v1 prefix
             sources=sources,
             metadata={
                 "stt_duration": stt_duration,
