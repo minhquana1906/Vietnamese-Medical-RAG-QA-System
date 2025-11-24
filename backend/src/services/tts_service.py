@@ -18,7 +18,7 @@ TTS_CACHE_TTL = 86400  # 24 hours cache for generated audio
 # ElevenLabs API configuration
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
-DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "A5w1fw5x0uXded1LDvZp")  # Rachel
+DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "1rqNHUqUbBGpY3OyzPMI")
 
 
 class TtsService:
@@ -113,6 +113,7 @@ class TtsService:
         model_id: str = "eleven_multilingual_v2",
         stability: float = 0.5,
         similarity_boost: float = 0.75,
+        speed: float = 1.0,
     ) -> bytes:
         """
         Synthesize speech from text using ElevenLabs API
@@ -123,6 +124,7 @@ class TtsService:
             model_id: ElevenLabs model ID
             stability: Voice stability (0.0-1.0)
             similarity_boost: Clarity/similarity boost (0.0-1.0)
+            speed: Speech speed multiplier (0.5-2.0)
 
         Returns:
             bytes: Audio data in MP3 format
@@ -160,6 +162,7 @@ class TtsService:
                 "voice_settings": {
                     "stability": stability,
                     "similarity_boost": similarity_boost,
+                    "speed": speed,
                 },
             }
 

@@ -8,22 +8,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install dependencies (pin versions)
-RUN uv pip install --system --no-cache \
-    fastapi==0.115.3 \
-    uvicorn[standard]==0.25.0 \
-    transformers==4.57.1 \
-    sentence-transformers==5.1.2 \
-    redis==5.0.7 \
-    httpx==0.28.1 \
-    loguru==0.7.3 \
-    pydantic==2.11.9 \
-    pydantic-settings==2.11.0 \
-    faster-whisper==1.2.1 \
-    python-multipart==0.0.18
+# Install dependencies 
+COPY requirements.txt /app/requirements.txt
+RUN uv pip install --system --no-cache -r /app/requirements.txt
 
-# Copy code
-# COPY serving/qwen3_models/app.py /app/app.py
+# Fix for ctranslate2/faster-whisper not finding cuDNN/cuBLAS
+# We link the nvidia libraries from site-packages to /usr/lib/x86_64-linux-gnu/
+RUN python3 -c "import site; import os; packages_path = site.getsitepackages()[0]; os.system(f'ln -sf {packages_path}/nvidia/cudnn/lib/libcudnn* /usr/lib/x86_64-linux-gnu/ && ln -sf {packages_path}/nvidia/cublas/lib/libcublas* /usr/lib/x86_64-linux-gnu/')" || true
 
 EXPOSE 8002
 

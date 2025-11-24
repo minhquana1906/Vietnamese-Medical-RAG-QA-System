@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from ..configs.setup import get_backend_settings
 from ..models import Step, Thread, User
-from ..services.summarizer import get_summarized_content
 from ..tasks import bot_route_answer_message
 
 settings = get_backend_settings()
@@ -36,6 +35,39 @@ def get_or_create_user(
 def get_thread(db: Session, thread_id: str) -> Optional[Thread]:
     """Get thread by ID without creating it"""
     return db.query(Thread).filter(Thread.id == thread_id).first()
+
+
+def get_or_create_thread(
+    db: Session, thread_id: str, user_id: str, metadata: Optional[Dict] = None
+) -> Thread:
+    """
+    Get thread by ID, create if not exists (for voice/audio inputs)
+
+    Args:
+        db: Database session
+        thread_id: Thread UUID string
+        user_id: User UUID (from get_or_create_user)
+        metadata: Optional thread metadata
+
+    Returns:
+        Thread: Existing or newly created thread
+    """
+    thread = db.query(Thread).filter(Thread.id == thread_id).first()
+
+    if not thread:
+        thread = Thread(
+            id=thread_id,
+            userId=user_id,
+            name="Voice Conversation",  # Default name for voice threads
+            createdAt=datetime.now(timezone.utc).isoformat(),
+            metadata_=metadata or {},
+        )
+        db.add(thread)
+        db.commit()
+        db.refresh(thread)
+        logger.info(f"Created new thread: {thread_id} for user {user_id}")
+
+    return thread
 
 
 def save_user_message(db: Session, thread: Thread, query: str) -> Step:
@@ -181,4 +213,88 @@ def handle_rag_query(
     sources = None
 
     # Return response - Chainlit will automatically save both user message and assistant response
+    return response, sources
+
+
+def handle_speech_rag_query(
+    db: Session, user_identifier: str, thread_id: str, query: str
+) -> Tuple[str, Optional[List[Dict]]]:
+    """
+    Handle RAG query for Speech interface with optimized prompting.
+
+    Uses SPEECH_RAG_SYSTEM_PROMPT for natural, concise audio-optimized responses.
+    Same flow as handle_rag_query but with different system prompt.
+
+    Args:
+        db: Database session
+        user_identifier: User identifier from OAuth
+        thread_id: Thread UUID from Chainlit
+        query: User's transcribed question
+
+    Returns:
+        Tuple[str, Optional[List[Dict]]]: (response_text, sources)
+    """
+    logger.info(
+        f"Handling Speech RAG query: user={user_identifier}, thread={thread_id}"
+    )
+
+    # Get or create user
+    user = get_or_create_user(db, user_identifier)
+    if not user:
+        logger.error(f"Failed to get/create user: {user_identifier}")
+        return (
+            "Xin lỗi, không thể xác thực người dùng. Vui lòng thử lại.",
+            None,
+        )
+
+    # Get or create thread (auto-create for voice inputs)
+    thread = get_or_create_thread(
+        db, thread_id, str(user.id), metadata={"interface": "voice"}
+    )
+
+    if not thread:
+        logger.error(f"Failed to get/create thread: {thread_id}")
+        return (
+            "Không tìm thấy cuộc trò chuyện. Vui lòng làm mới trang và thử lại.",
+            None,
+        )
+
+    # Get conversation history
+    history = get_conversation_history(db, thread)
+
+    # Prepare messages with SPEECH-OPTIMIZED system prompt
+    messages = [{"role": "system", "content": settings.speech_rag_system_prompt}]
+    messages.extend(history)
+
+    # Extract history for RAG (exclude system prompt)
+    rag_history = messages[1:] if len(messages) > 1 else []
+
+    logger.info(
+        f"Speech RAG - Thread {thread.id}: {len(rag_history)} messages in history"
+    )
+
+    # Call RAG pipeline with speech-optimized prompt (PASS speech_rag_system_prompt)
+    try:
+        response = bot_route_answer_message(
+            rag_history, query, system_prompt=settings.speech_rag_system_prompt
+        )
+        logger.info(f"Generated speech-optimized response for thread {thread.id}")
+
+        # Safety check
+        if response is None:
+            logger.error(
+                "Speech RAG pipeline returned None - generation service unavailable"
+            )
+            response = "Xin lỗi, hệ thống AI đang tạm thời không khả dụng. Vui lòng thử lại sau."
+    except Exception as e:
+        logger.error(f"Error in Speech RAG pipeline: {e}", exc_info=True)
+        response = "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
+
+    logger.info(
+        f"Speech RAG query completed: user={user_identifier}, thread={thread_id}"
+    )
+
+    # TODO: Extract sources from RAG pipeline
+    sources = None
+
     return response, sources

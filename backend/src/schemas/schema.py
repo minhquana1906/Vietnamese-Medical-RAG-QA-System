@@ -246,12 +246,22 @@ class TtsRequest(BaseModel):
         ..., description="Text to synthesize", min_length=1, max_length=5000
     )
     voice_id: Optional[str] = Field(
-        None, description="Voice identifier (uses default if None)"
+        None, description="Voice identifier (uses default from settings if None)"
     )
-    model_id: str = Field("eleven_turbo_v2_5", description="TTS model identifier")
-    stability: float = Field(0.5, ge=0.0, le=1.0, description="Voice stability")
-    similarity_boost: float = Field(
-        0.75, ge=0.0, le=1.0, description="Clarity/similarity boost"
+    model_id: Optional[str] = Field(
+        None, description="TTS model identifier (uses default from settings if None)"
+    )
+    stability: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Voice stability (uses default from settings if None)",
+    )
+    similarity_boost: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Clarity/similarity boost (uses default from settings if None)",
     )
     speed: float = Field(1.0, ge=0.5, le=2.0, description="Speech speed multiplier")
 
@@ -280,6 +290,6 @@ class AudioRagResponse(BaseModel):
     thread_id: str = Field(..., description="Thread ID")
     transcript: str = Field(..., description="Transcribed user query")
     response: str = Field(..., description="Assistant's text response")
+    audio_url: str = Field(..., description="URL to download generated audio file")
     sources: Optional[List[Dict]] = Field(None, description="Source documents")
     metadata: Optional[Dict] = Field(None, description="Processing metadata")
-    # Audio response returned as file attachment

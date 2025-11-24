@@ -1,8 +1,3 @@
-import os
-import uuid
-import wave
-import io
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -10,20 +5,42 @@ import audioop
 import chainlit as cl
 from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
 from chainlit.types import ThreadDict
-from helpers import (
-    DATABASE_URL,
-    call_rag_api,
-    call_stt_api,
-    call_tts_api,
-    simulate_streaming,
-)
+from helpers import DATABASE_URL, call_rag_api, simulate_streaming, process_audio
 from loguru import logger
 
 
 # Audio detection constants
-SILENCE_THRESHOLD = 3500  # Adjust based on audio level
-SILENCE_TIMEOUT = 1300.0  # Milliseconds of silence to end turn
-MAX_AUDIO_DURATION_MS = 30000  # Maximum 30 seconds recording
+# ============================================================================
+# GIẢI THÍCH CÁC THAM SỐ AUDIO:
+#
+# 1. SILENCE_THRESHOLD (0-32768):
+#    - Ngưỡng năng lượng âm thanh để phát hiện im lặng
+#    - RMS (Root Mean Square) của audio 16-bit: 0 = hoàn toàn im lặng, 32768 = max volume
+#    - Giá trị thấp (500-1500): Nhạy hơn, dễ dàng kết thúc recording
+#    - Giá trị cao (3000-5000): Ít nhạy, chờ lâu hơn trước khi kết thúc
+#    - Recommended: 2000-3500 cho môi trường ít ồn, 4000-6000 cho môi trường ồn
+#
+# 2. SILENCE_TIMEOUT (milliseconds):
+#    - Thời gian im lặng liên tục để tự động kết thúc recording
+#    - Giá trị thấp (500-1000ms): Kết thúc nhanh, phù hợp câu ngắn
+#    - Giá trị cao (2000-3000ms): Chờ lâu hơn, phù hợp câu dài/suy nghĩ giữa chừng
+#    - Recommended: 1500-2000ms cho input dài
+#
+# 3. MAX_AUDIO_DURATION_MS (milliseconds):
+#    - Giới hạn thời gian recording tối đa (tránh recording vô hạn)
+#    - Recommended: 60000ms (60s) cho input dài, 30000ms (30s) cho input ngắn
+#
+# 4. sample_rate (trong config.toml):
+#    - Tần số lấy mẫu audio (Hz)
+#    - 16000 Hz: Chất lượng đủ cho STT, tiết kiệm băng thông
+#    - 24000 Hz: Chất lượng tốt hơn, cân bằng giữa quality và size
+#    - 44100 Hz: Chất lượng cao (music), không cần thiết cho speech
+#    - Recommended: 16000-24000 Hz cho voice input
+# ============================================================================
+
+SILENCE_THRESHOLD = 1500  # Giảm từ 3500 để nhạy hơn với im lặng
+SILENCE_TIMEOUT = 1500.0  # Tăng từ 1300ms lên 2000ms cho input dài hơn
+MAX_AUDIO_DURATION_MS = 30000  # Tăng từ 30s lên 60s để cho phép câu hỏi dài
 
 
 @cl.data_layer
@@ -108,7 +125,7 @@ async def on_chat_start():
             "Tôi là Meddy - trợ lý y tế AI của bạn.\n\n"
             "💬 **Text mode**: Nhập câu hỏi trực tiếp\n"
             "🎤 **Voice mode**: Nhấn `P` để bắt đầu nói\n\n"
-            "_Lưu ý: Voice mode sẽ tự động tắt sau 1.3s im lặng_"
+            f"_Lưu ý: Voice mode sẽ tự động tắt sau {SILENCE_TIMEOUT / 1000:.1f}s im lặng_"
         )
     ).send()
 
@@ -151,11 +168,25 @@ async def on_message(message: cl.Message):
         # Call backend RAG API
         result = await call_rag_api(user_identifier, thread_id, user_message)
 
+        # Debug: Log what we actually got
+        logger.debug(f"call_rag_api returned: type={type(result)}, value={result}")
+
+        # Safety check: ensure result is not None
+        if result is None:
+            logger.error("RAG API returned None")
+            raise Exception("Đã có lỗi xảy ra khi kết nối với backend")
+
         # Clear typing indicator
         response_message.content = ""
 
         # Stream the response
         response_text = result.get("response", "")
+
+        # Validate response text
+        if not response_text:
+            logger.warning("Empty response text from backend")
+            response_text = "Xin lỗi, tôi không thể tạo câu trả lời cho câu hỏi này."
+
         for chunk in simulate_streaming(response_text):
             await response_message.stream_token(chunk)
 
@@ -170,11 +201,12 @@ async def on_message(message: cl.Message):
                 await response_message.stream_token(source_text)
 
         # Add metadata footer (optional, for debugging)
-        metadata = result.get("metadata", {})
-        duration = metadata.get("duration_seconds")
-        if duration:
-            footer = f"\n\n_Thời gian xử lý: {duration:.2f}s_"
-            await response_message.stream_token(footer)
+        metadata = result.get("metadata") or {}  # Handle None from backend
+        if metadata:
+            duration = metadata.get("duration_seconds")
+            if duration:
+                footer = f"\n\n_Thời gian xử lý: {duration:.2f}s_"
+                await response_message.stream_token(footer)
 
     except Exception as e:
         logger.error(f"Error processing message: {e}")
@@ -290,177 +322,6 @@ async def on_audio_chunk(chunk: cl.InputAudioChunk):
         cl.user_session.set("silent_duration_ms", 0)
         if not is_speaking:
             cl.user_session.set("is_speaking", True)
-
-
-async def process_audio():
-    """
-    Process accumulated audio chunks: STT → RAG → TTS → Response
-    """
-    user = cl.user_session.get("user")
-    if not user:
-        return
-
-    user_identifier = user.identifier
-    thread_id = cl.context.session.thread_id
-
-    # Get accumulated audio chunks
-    audio_chunks = cl.user_session.get("audio_chunks", [])
-
-    if not audio_chunks:
-        logger.warning("No audio chunks to process")
-        return
-
-    # Reset audio chunks for next recording
-    cl.user_session.set("audio_chunks", [])
-
-    # Concatenate all chunks into single audio array
-    concatenated_audio = np.concatenate(audio_chunks)
-
-    # Create WAV file in memory
-    wav_buffer = io.BytesIO()
-    with wave.open(wav_buffer, "wb") as wav_file:
-        wav_file.setnchannels(1)  # Mono
-        wav_file.setsampwidth(2)  # 16-bit
-        wav_file.setframerate(24000)  # 24kHz PCM (Chainlit default)
-        wav_file.writeframes(concatenated_audio.tobytes())
-
-    wav_buffer.seek(0)
-
-    # Check audio duration
-    frames = concatenated_audio.shape[0]
-    duration = frames / 24000.0  # Sample rate
-
-    if duration <= 0.5:
-        logger.warning(f"Audio too short: {duration:.2f}s")
-        await cl.Message(
-            content="⚠️ **Audio quá ngắn.** Vui lòng nói lâu hơn (tối thiểu 0.5s).",
-            author="system",
-        ).send()
-        return
-
-    logger.info(f"Processing audio: duration={duration:.2f}s, user={user_identifier}")
-
-    # Create response message
-    response_message = cl.Message(content="", author="Meddy")
-    await response_message.send()
-
-    try:
-        # Step 1: Speech-to-Text
-        await response_message.stream_token("🎤 **Đang nhận diện giọng nói...**\n\n")
-
-        # Save WAV to temp file for STT API
-        audio_dir = Path("/tmp/audio")
-        audio_dir.mkdir(parents=True, exist_ok=True)
-        temp_audio_path = audio_dir / f"input_{uuid.uuid4().hex}.wav"
-
-        with open(temp_audio_path, "wb") as f:
-            f.write(wav_buffer.getvalue())
-
-        # Call STT API
-        stt_result = await call_stt_api(str(temp_audio_path))
-        transcript = stt_result.get("text", "").strip()
-
-        # Cleanup temp file
-        temp_audio_path.unlink(missing_ok=True)
-
-        if not transcript:
-            await response_message.stream_token(
-                "❌ **Không nhận diện được giọng nói.**\n\n"
-                "Vui lòng thử lại với âm thanh rõ ràng hơn."
-            )
-            await response_message.update()
-            return
-
-        # Display transcript
-        response_message.content = f"📝 **Bạn:** {transcript}\n\n"
-        await response_message.update()
-
-        # Step 2: RAG Query (with length limit for voice mode)
-        await response_message.stream_token("🤔 **Đang suy nghĩ...**\n\n")
-
-        # Add instruction to limit response length for voice mode
-        voice_query = (
-            f"{transcript}\n\n"
-            "[VOICE MODE: Please provide a concise answer in Vietnamese, "
-            "maximum 300 characters (~85 tokens, 3-4 sentences). "
-            "Focus on the most important information.]"
-        )
-
-        rag_result = await call_rag_api(user_identifier, thread_id, voice_query)
-        response_text = rag_result.get("response", "")
-
-        # Truncate if too long (safety check)
-        if len(response_text) > 350:
-            response_text = response_text[:300] + "..."
-            logger.warning(
-                f"Response truncated from {len(rag_result.get('response', ''))} to 300 chars"
-            )
-
-        # Clear previous content and display answer
-        response_message.content = f"📝 **Bạn:** {transcript}\n\n💬 **Trả lời:**\n\n"
-
-        # Stream the response text
-        for chunk in simulate_streaming(response_text):
-            await response_message.stream_token(chunk)
-
-        await response_message.update()
-
-        # Step 3: Text-to-Speech
-        await response_message.stream_token("\n\n🔊 **Đang tạo giọng nói...**")
-
-        try:
-            audio_data = await call_tts_api(response_text)
-
-            # Create Audio element for playback
-            output_audio_el = cl.Audio(
-                name="response_audio",
-                content=audio_data,
-                mime="audio/mpeg",
-                auto_play=True,
-                display="inline",
-            )
-
-            response_message.elements = [output_audio_el]
-
-            # Update final message
-            response_message.content = (
-                f"📝 **Bạn:** {transcript}\n\n"
-                f"💬 **Trả lời:**\n\n{response_text}\n\n"
-                f"🔊 _Đang phát audio..._"
-            )
-            await response_message.update()
-
-        except Exception as tts_error:
-            logger.error(f"TTS error: {tts_error}")
-            await response_message.stream_token(
-                "\n\n⚠️ _Không thể tạo giọng nói. Bạn vẫn có thể đọc câu trả lời bên trên._"
-            )
-            await response_message.update()
-
-        # Add sources (optional, compact format for voice mode)
-        sources = rag_result.get("sources", [])
-        if sources and len(sources) > 0:
-            await response_message.stream_token("\n\n---\n📚 _Nguồn: ")
-            source_titles = [
-                s.get("title", "N/A") for s in sources[:2]
-            ]  # Max 2 sources
-            await response_message.stream_token(", ".join(source_titles) + "_")
-            await response_message.update()
-
-        logger.info(
-            f"Audio RAG completed: transcript_len={len(transcript)}, "
-            f"response_len={len(response_text)}, duration={duration:.2f}s"
-        )
-
-    except Exception as e:
-        logger.error(f"Error processing audio: {e}", exc_info=True)
-        error_message = (
-            f"📝 **Bạn:** {transcript if 'transcript' in locals() else 'N/A'}\n\n"
-            f"❌ **Lỗi:** {str(e)}\n\n"
-            "Vui lòng thử lại."
-        )
-        response_message.content = error_message
-        await response_message.update()
 
 
 @cl.on_audio_end
