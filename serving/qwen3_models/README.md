@@ -26,14 +26,14 @@ Serve 4 models (Embedding, Reranker, Guardrails, STT) trên GPU để tối ưu 
 
 ```bash
 cd serving/qwen3_models
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 2. Verify GPU Service
 
 ```bash
 # Check logs
-docker-compose logs -f
+docker compose logs -f
 
 # Health check
 curl http://localhost:8002/health
@@ -58,7 +58,7 @@ QWEN3_MODELS_ENABLED=true  # Set to true to use GPU service
 Restart backend:
 ```bash
 cd backend
-docker-compose restart chatbot_api chatbot_worker
+docker compose restart chatbot_api chatbot_worker
 ```
 
 ## Architecture
@@ -208,13 +208,13 @@ QWEN3_MODELS_ENABLED=false
 2. Restart backend:
 ```bash
 cd backend
-docker-compose restart chatbot_api chatbot_worker
+docker compose restart chatbot_api chatbot_worker
 ```
 
 3. (Optional) Stop GPU service:
 ```bash
 cd serving/qwen3_models
-docker-compose down
+docker compose down
 ```
 
 ## Monitoring
@@ -224,7 +224,7 @@ docker-compose down
 watch -n 1 nvidia-smi
 
 # Check service logs
-docker-compose logs -f qwen3_models
+docker compose logs -f qwen3_models
 
 # Monitor API latency
 curl -w "@curl-format.txt" -s http://localhost:8002/health

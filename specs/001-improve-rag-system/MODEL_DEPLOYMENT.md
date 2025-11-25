@@ -127,7 +127,7 @@ uv run uvicorn src.main:app --reload
 sudo systemctl restart rag-backend
 
 # Docker
-docker-compose restart backend
+docker compose restart backend
 ```
 
 ### 6. (Optional) Restart vLLM
@@ -150,7 +150,7 @@ environment:
 
 **Restart**:
 ```bash
-docker-compose restart vllm
+docker compose restart vllm
 ```
 
 ---
@@ -176,7 +176,7 @@ git push origin main
 
 # Restart services
 sudo systemctl restart rag-backend
-docker-compose restart vllm
+docker compose restart vllm
 ```
 
 ### Manual Rollback (Edit Config)
@@ -369,7 +369,7 @@ environment:
 # Or reduce max model length
   - MAX_MODEL_LEN=4096  # Reduce from 8192
 
-docker-compose restart vllm
+docker compose restart vllm
 ```
 
 ---

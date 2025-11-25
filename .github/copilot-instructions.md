@@ -90,11 +90,11 @@ chainlit run main.py
 
 # Database
 cd database
-docker-compose up -d
+docker compose up -d
 
 # GPU Service (Qwen3 + Whisper-turbo STT)
 cd serving/qwen3_models
-docker-compose up -d  # Requires GPU with 11GB+ VRAM
+docker compose up -d  # Requires GPU with 11GB+ VRAM
 
 # Generation Model Serving (vLLM)
 cd serving/vllm
@@ -231,7 +231,7 @@ Backend API sử dụng **modular router pattern** với 5 routers:
    ```
 2. Commit to Git: `git commit -m "Deploy qwen3-medical-v1"`
 3. Restart backend: `systemctl restart rag-backend`
-4. Restart vLLM (optional): `docker-compose restart vllm`
+4. Restart vLLM (optional): `docker compose restart vllm`
 
 ### Rollback
 1. Revert Git commit: `git revert HEAD`

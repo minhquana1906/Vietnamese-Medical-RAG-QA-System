@@ -138,10 +138,10 @@ Start PostgreSQL, Qdrant, Elasticsearch, Redis using Docker Compose:
 ```bash
 # Start database services
 cd database
-docker-compose up -d
+docker compose up -d
 
 # Wait for services to be ready
-docker-compose ps  # Check all services are "Up"
+docker compose ps  # Check all services are "Up"
 
 # Test PostgreSQL connection
 docker exec -it medical-rag-postgres psql -U postgres -d medical_rag -c "SELECT version();"
@@ -286,7 +286,7 @@ curl http://localhost:9200/medical_documents/_count
 
 ```bash
 cd monitoring
-docker-compose up -d prometheus grafana loki tempo promtail
+docker compose up -d prometheus grafana loki tempo promtail
 ```
 
 Access dashboards:
@@ -550,8 +550,8 @@ Verify model config at `serving/triton/model_repository/{model_name}/config.pbtx
 **Solution**: Ensure database container is running:
 ```bash
 cd database
-docker-compose ps
-docker-compose restart postgres
+docker compose ps
+docker compose restart postgres
 ```
 
 ### Issue: Qdrant out of memory

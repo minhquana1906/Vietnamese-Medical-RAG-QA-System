@@ -258,7 +258,7 @@
 - [ ] T119 [US6] Configure Tempo exporter in backend/src/main.py to send traces to Tempo instance
 - [ ] T120 [P] [US6] Add model serving health check endpoint in backend/src/main.py: GET /health/models
 - [ ] T121 [P] [US6] Expose Prometheus metrics endpoint in backend/src/main.py: GET /metrics
-- [ ] T122 [US6] Start monitoring stack with docker-compose up in monitoring/ directory
+- [ ] T122 [US6] Start monitoring stack with docker compose up in monitoring/ directory
 - [ ] T123 [US6] Import Grafana dashboards from monitoring/grafana/dashboards/ directory
 - [ ] T124 [US6] Verify metrics are flowing to Prometheus and visualized in Grafana
 - [ ] T125 [US6] Verify logs are captured in Loki and queryable via Grafana Explore
