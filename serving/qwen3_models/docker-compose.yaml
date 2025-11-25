@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: extra_models_gpu
+    container_name: extra_models
     environment:
       # Model serving config
       - BACKEND_API_URL=http://extra_models:8002

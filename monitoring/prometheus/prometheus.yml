@@ -33,14 +33,14 @@ scrape_configs:
   # vLLM model serving
   - job_name: 'vllm'
     static_configs:
-      - targets: ['vllm:8000']
+      - targets: ['171.246.102.252:65484']
     metrics_path: '/metrics'
     scrape_interval: 10s
 
   # GPU service (Qwen3 models + Whisper-turbo)
   - job_name: 'gpu_service'
     static_configs:
-      - targets: ['extra_models_gpu:8002']
+      - targets: ['extra_models:8002']
     metrics_path: '/metrics'
     scrape_interval: 15s
 

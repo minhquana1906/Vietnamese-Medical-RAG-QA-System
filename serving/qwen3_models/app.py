@@ -41,10 +41,6 @@ model_inference_total = Counter(
     ["model_type", "model_name", "status"],
 )
 
-# Mount Prometheus metrics endpoint
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
-
 # Check GPU availability
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info(f"🚀 Using device: {DEVICE}")
@@ -308,6 +304,15 @@ def health_check():
         "models_loaded": True,
         "models": ["embedding", "reranker", "guardrails", "stt"],
     }
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint"""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi.responses import Response
+    
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/v1/models/embed", response_model=EmbedResponse)

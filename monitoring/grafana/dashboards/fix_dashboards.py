@@ -21,34 +21,34 @@ DATASOURCE_MAPPING = {
 def fix_dashboard(dashboard_path: Path) -> bool:
     """
     Fix a single dashboard file by replacing datasource placeholders.
-    
+
     Returns True if file was modified, False otherwise.
     """
     print(f"\n📄 Processing: {dashboard_path.name}")
-    
+
     try:
-        with open(dashboard_path, 'r') as f:
+        with open(dashboard_path, "r") as f:
             content = f.read()
-        
+
         original_content = content
         modified = False
-        
+
         # Remove __inputs and __requires sections (not needed after provisioning)
         data = json.loads(content)
-        
+
         if "__inputs" in data:
             print(f"  ✓ Removing __inputs section")
             del data["__inputs"]
             modified = True
-        
+
         if "__requires" in data:
             print(f"  ✓ Removing __requires section")
             del data["__requires"]
             modified = True
-        
+
         # Convert back to string for regex replacements
         content = json.dumps(data, indent=2)
-        
+
         # Replace datasource placeholder variables: ${DS_PROMETHEUS} -> prometheus-uid
         for placeholder, uid in DATASOURCE_MAPPING.items():
             old_pattern = f"${{{placeholder}}}"
@@ -57,27 +57,27 @@ def fix_dashboard(dashboard_path: Path) -> bool:
                 content = content.replace(old_pattern, uid)
                 print(f"  ✓ Replaced {count}x: ${{{placeholder}}} → {uid}")
                 modified = True
-        
+
         if modified:
             # Parse back to JSON to ensure valid format
             data = json.loads(content)
-            
+
             # Set null id to enable provisioning
             if data.get("id") is not None:
                 data["id"] = None
                 print(f"  ✓ Set dashboard id to null (for provisioning)")
-            
+
             # Write back with pretty formatting
-            with open(dashboard_path, 'w') as f:
+            with open(dashboard_path, "w") as f:
                 json.dump(data, f, indent=2)
-                f.write('\n')  # Add trailing newline
-            
+                f.write("\n")  # Add trailing newline
+
             print(f"  ✅ Dashboard fixed successfully")
             return True
         else:
             print(f"  ⏭️  No changes needed")
             return False
-    
+
     except json.JSONDecodeError as e:
         print(f"  ❌ JSON parsing error: {e}")
         return False
@@ -89,7 +89,7 @@ def fix_dashboard(dashboard_path: Path) -> bool:
 def main():
     """Process all dashboard JSON files in current directory."""
     dashboards_dir = Path(__file__).parent
-    
+
     print("=" * 60)
     print("🔧 Grafana Dashboard Fixer")
     print("=" * 60)
@@ -97,30 +97,29 @@ def main():
     print(f"\n🎯 Datasource mappings:")
     for placeholder, uid in DATASOURCE_MAPPING.items():
         print(f"   ${{{placeholder}}} → {uid}")
-    
+
     # Find all JSON dashboard files (exclude this script and other non-dashboard files)
     dashboard_files = [
-        f for f in dashboards_dir.glob("*.json")
-        if f.name not in ["fix_dashboards.py"]
+        f for f in dashboards_dir.glob("*.json") if f.name not in ["fix_dashboards.py"]
     ]
-    
+
     if not dashboard_files:
         print("\n⚠️  No dashboard JSON files found")
         return 1
-    
+
     print(f"\n📊 Found {len(dashboard_files)} dashboard(s) to process")
-    
+
     # Process each dashboard
     modified_count = 0
     for dashboard_file in sorted(dashboard_files):
         if fix_dashboard(dashboard_file):
             modified_count += 1
-    
+
     # Summary
     print("\n" + "=" * 60)
     print(f"✨ Summary: {modified_count}/{len(dashboard_files)} dashboards modified")
     print("=" * 60)
-    
+
     if modified_count > 0:
         print("\n✅ Dashboards fixed successfully!")
         print("\nNext steps:")
