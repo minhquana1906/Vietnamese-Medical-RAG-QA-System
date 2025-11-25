@@ -239,34 +239,56 @@
 
 ---
 
-## Phase 8: User Story 6 - Comprehensive System Monitoring (Priority: P6)
+## Phase 8: User Story 6 - Minimal MVP Monitoring (Priority: P6)
 
-**Goal**: System exposes detailed metrics, logs, and traces for RAG pipeline observability and debugging
+**Goal**: Essential observability với full model metrics (generation/embedding/rerank/guardrails) + voice pipeline monitoring
 
-**Independent Test**: Trigger RAG operations and verify metrics are collected, logs are written, and traces are captured
+**Independent Test**: Trigger RAG + voice operations, verify all model metrics visible in Grafana
 
-### Implementation for User Story 6
+### Implementation for User Story 6 (MVP Scope)
 
-- [ ] T111 [P] [US6] Create monitoring/prometheus/alerts.yml with alerting rules for high error rates, high latency
-- [ ] T112 [P] [US6] Create monitoring/grafana/dashboards/rag_pipeline.json with RAG-specific metrics visualization
-- [ ] T113 [P] [US6] Create monitoring/grafana/dashboards/model_serving.json with vLLM and FastAPI metrics
-- [ ] T114 [P] [US6] Create monitoring/grafana/dashboards/system_health.json with CPU, memory, GPU utilization
-- [ ] T115 [P] [US6] Create monitoring/grafana/datasources.yaml to connect Prometheus, Loki, and Tempo
-- [ ] T116 [US6] Add structured logging to all RAG pipeline stages in backend/src/tasks.py (embedding, retrieval, reranking, generation)
-- [ ] T117 [P] [US6] Configure Promtail in monitoring/promtail/promtail-config.yaml to scrape backend logs
-- [ ] T118 [P] [US6] Add trace spans to RAG pipeline in backend/src/tasks.py using OpenTelemetry decorators
-- [ ] T119 [US6] Configure Tempo exporter in backend/src/main.py to send traces to Tempo instance
-- [ ] T120 [P] [US6] Add model serving health check endpoint in backend/src/main.py: GET /health/models
-- [ ] T121 [P] [US6] Expose Prometheus metrics endpoint in backend/src/main.py: GET /metrics
-- [ ] T122 [US6] Start monitoring stack with docker compose up in monitoring/ directory
-- [ ] T123 [US6] Import Grafana dashboards from monitoring/grafana/dashboards/ directory
-- [ ] T124 [US6] Verify metrics are flowing to Prometheus and visualized in Grafana
-- [ ] T125 [US6] Verify logs are captured in Loki and queryable via Grafana Explore
-- [ ] T126 [US6] Verify traces are captured in Tempo with correct span relationships
+**Infrastructure Setup**:
+- [X] T111-T121 [US6] Basic monitoring stack configured (Prometheus, Loki, Tempo, Grafana)
+- [X] T122 [US6] Fix Prometheus config: Add GPU service scrape target in monitoring/prometheus/prometheus.yml
+- [X] T123 [US6] Fix Promtail config: Enable Docker auto-discovery in monitoring/promtail/promtail-config.yaml
+- [X] T124 [US6] Update monitoring docker-compose: Ensure Docker socket mount for Promtail
 
-**Git Example**: `git commit -m "Deploy full observability stack with Prometheus, Loki, Tempo, and Grafana dashboards"`
+**GPU Service Instrumentation**:
+- [X] T125 [US6] Add prometheus-client to serving/qwen3_models/requirements.txt
+- [X] T126 [US6] Add /metrics endpoint in serving/qwen3_models/app.py (Prometheus exporter)
+- [X] T127 [US6] Instrument 4 model endpoints: /embed, /rerank, /guard, /stt với latency + count metrics
+- [X] T128 [US6] Add GPU memory tracking với background task (update every 30s)
+- [ ] T129 [US6] Restart GPU service: `cd serving/qwen3_models && docker compose restart`
 
-**Checkpoint**: At this point, comprehensive monitoring is operational with dashboards showing system health
+**Voice Pipeline Instrumentation**:
+- [X] T130 [US6] Add voice metrics in backend/src/core/metrics.py (3 metrics: duration, stage_duration, errors)
+- [X] T131 [US6] Instrument /v1/models/stt, /v1/models/tts, /v1/rag/audio in backend/src/routers/audio.py
+
+**RAG Pipeline Tracing**:
+- [X] T132 [US6] Add OpenTelemetry tracer to backend/src/tasks.py
+- [X] T133 [US6] Create tracing utilities in backend/src/core/tracing.py
+- [X] T134 [US6] Add tracing to RAG router endpoint in backend/src/routers/rag.py (wraps RAG service)
+- [ ] T135 [US6] Restart backend: `cd backend && docker compose restart chatbot_api`
+
+**Dashboards**:
+- [X] T136 [US6] Create dashboards provisioning config: monitoring/grafana/dashboards/dashboards.yaml
+- [X] T137 [US6] Build custom Model Monitoring dashboard: monitoring/grafana/dashboards/model_monitoring.json (7 panels)
+- [ ] T138 [US6] Restart Grafana to import dashboards: `cd monitoring && docker compose restart grafana`
+
+**Alerts**:
+- [X] T139 [US6] Update monitoring/prometheus/alerts.yml with 2 new rules (HighModelInferenceLatency, HighVoiceErrorRate)
+- [ ] T140 [US6] Reload Prometheus: `curl -X POST http://localhost:9090/-/reload`
+
+**Verification**:
+- [ ] T141 [US6] Verify GPU metrics: `curl http://localhost:8002/metrics | grep model_inference`
+- [ ] T142 [US6] Verify voice metrics: `curl http://localhost:8000/metrics | grep voice_`
+- [ ] T143 [US6] Verify logs: Grafana Explore → Loki → `{job="docker_containers"}`
+- [ ] T144 [US6] Verify RAG traces: Grafana Explore → Tempo → Service: chatbot_api
+- [ ] T145 [US6] Verify Model Monitoring dashboard showing data in all 7 panels
+
+**Git Example**: `git commit -m "Add minimal MVP monitoring with full model metrics + voice pipeline observability"`
+
+**Checkpoint**: Essential monitoring operational, đủ visibility để debug model performance issues
 
 ---
 

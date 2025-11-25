@@ -67,3 +67,24 @@ document_indexing_duration_seconds = Histogram(
     "Document indexing duration in seconds",
     buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0],
 )
+
+# Voice processing metrics
+voice_request_duration_seconds = Histogram(
+    "voice_request_duration_seconds",
+    "Voice endpoint latency (end-to-end)",
+    ["endpoint"],  # stt, tts, audio_rag
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0],
+)
+
+audio_rag_stage_duration_seconds = Histogram(
+    "audio_rag_stage_duration_seconds",
+    "Audio RAG pipeline stage latency",
+    ["stage"],  # stt, rag, tts
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 20.0],
+)
+
+voice_request_errors_total = Counter(
+    "voice_request_errors_total",
+    "Voice request errors",
+    ["endpoint", "error_type"],
+)

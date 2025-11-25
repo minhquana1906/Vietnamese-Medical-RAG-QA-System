@@ -54,8 +54,8 @@ services:
     restart: always
     volumes:
       - ./promtail/promtail-config.yaml:/etc/promtail/config.yaml
-      - /var/log:/var/log
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ~/docker_data/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yaml
     networks:
       - medical_rag_network

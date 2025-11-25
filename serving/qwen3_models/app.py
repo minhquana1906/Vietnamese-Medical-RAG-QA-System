@@ -1,6 +1,7 @@
 import os
 import time
 import hashlib
+import asyncio
 from pathlib import Path
 from typing import List, Optional
 
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from faster_whisper import WhisperModel, BatchedInferencePipeline
 from loguru import logger
+from prometheus_client import Gauge, Histogram, Counter, make_asgi_app
 
 # Initialize FastAPI
 app = FastAPI(
@@ -18,6 +20,30 @@ app = FastAPI(
     description="Serves Qwen3 Embedding, Reranker, Guardrails, and Whisper STT models on GPU",
     version="1.0.0",
 )
+
+# Prometheus metrics
+gpu_memory_used_bytes = Gauge(
+    "gpu_memory_used_bytes",
+    "GPU VRAM allocated in bytes",
+    ["device", "model_type"],
+)
+
+model_inference_duration_seconds = Histogram(
+    "model_inference_duration_seconds",
+    "Model inference duration",
+    ["model_type", "model_name"],
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
+)
+
+model_inference_total = Counter(
+    "model_inference_total",
+    "Total model inference requests",
+    ["model_type", "model_name", "status"],
+)
+
+# Mount Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 # Check GPU availability
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -162,6 +188,40 @@ async def startup_event():
     """Load models on startup"""
     logger.info("🚀 Starting Qwen3 Models GPU Service...")
     registry.load_models()
+    
+    # Start GPU memory monitoring
+    asyncio.create_task(update_gpu_memory_metrics())
+
+
+async def update_gpu_memory_metrics():
+    """Background task to update GPU memory metrics"""
+    while True:
+        try:
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    device_name = f"cuda:{i}"
+                    allocated = torch.cuda.memory_allocated(i)
+                    
+                    # Update metrics for each model type
+                    gpu_memory_used_bytes.labels(
+                        device=device_name, model_type="embedding"
+                    ).set(allocated * 0.25)  # Approximate split
+                    
+                    gpu_memory_used_bytes.labels(
+                        device=device_name, model_type="reranker"
+                    ).set(allocated * 0.25)
+                    
+                    gpu_memory_used_bytes.labels(
+                        device=device_name, model_type="guardrails"
+                    ).set(allocated * 0.25)
+                    
+                    gpu_memory_used_bytes.labels(
+                        device=device_name, model_type="stt"
+                    ).set(allocated * 0.25)
+        except Exception as e:
+            logger.warning(f"Failed to update GPU metrics: {e}")
+        
+        await asyncio.sleep(30)  # Update every 30 seconds
 
 
 # ============================================================================
@@ -254,9 +314,8 @@ async def embed_endpoint(request: EmbedRequest):
     if not registry.loaded:
         raise HTTPException(status_code=503, detail="Models not loaded")
 
+    start_time = time.time()
     try:
-        start_time = time.time()
-
         # Prepare instruction prefix (query vs document)
         if request.is_query:
             instruction = (
@@ -293,6 +352,18 @@ async def embed_endpoint(request: EmbedRequest):
         logger.debug(
             f"✅ Embedded {len(request.texts)} texts in {duration:.3f}s on {DEVICE}"
         )
+        
+        # Record metrics
+        model_inference_duration_seconds.labels(
+            model_type="embedding",
+            model_name="Qwen3-Embedding-0.6B"
+        ).observe(duration)
+        
+        model_inference_total.labels(
+            model_type="embedding",
+            model_name="Qwen3-Embedding-0.6B",
+            status="success"
+        ).inc()
 
         return EmbedResponse(
             embeddings=embeddings_list,
@@ -301,6 +372,11 @@ async def embed_endpoint(request: EmbedRequest):
 
     except Exception as e:
         logger.error(f"❌ Embedding error: {e}")
+        model_inference_total.labels(
+            model_type="embedding",
+            model_name="Qwen3-Embedding-0.6B",
+            status="error"
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -310,9 +386,8 @@ async def rerank_endpoint(request: RerankRequest):
     if not registry.loaded:
         raise HTTPException(status_code=503, detail="Models not loaded")
 
+    start_time = time.time()
     try:
-        start_time = time.time()
-
         # Prepare instruction
         instruction = (
             request.instruction
@@ -352,6 +427,18 @@ async def rerank_endpoint(request: RerankRequest):
         logger.debug(
             f"✅ Reranked {len(request.documents)} docs in {duration:.3f}s on {DEVICE}"
         )
+        
+        # Record metrics
+        model_inference_duration_seconds.labels(
+            model_type="reranker",
+            model_name="Qwen3-Reranker-0.6B"
+        ).observe(duration)
+        
+        model_inference_total.labels(
+            model_type="reranker",
+            model_name="Qwen3-Reranker-0.6B",
+            status="success"
+        ).inc()
 
         return RerankResponse(
             scores=top_scores,
@@ -361,6 +448,11 @@ async def rerank_endpoint(request: RerankRequest):
 
     except Exception as e:
         logger.error(f"❌ Reranking error: {e}")
+        model_inference_total.labels(
+            model_type="reranker",
+            model_name="Qwen3-Reranker-0.6B",
+            status="error"
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -370,9 +462,8 @@ async def guard_endpoint(request: GuardRequest):
     if not registry.loaded:
         raise HTTPException(status_code=503, detail="Models not loaded")
 
+    start_time = time.time()
     try:
-        start_time = time.time()
-
         # Build messages for chat template (following official Qwen3Guard pattern)
         if request.check_type == "input":
             messages = [{"role": "user", "content": request.text}]
@@ -453,6 +544,18 @@ async def guard_endpoint(request: GuardRequest):
         logger.debug(
             f"✅ Guard check in {duration:.3f}s: safe={is_safe}, severity={severity}"
         )
+        
+        # Record metrics
+        model_inference_duration_seconds.labels(
+            model_type="guardrails",
+            model_name="Qwen3Guard-Gen-0.6B"
+        ).observe(duration)
+        
+        model_inference_total.labels(
+            model_type="guardrails",
+            model_name="Qwen3Guard-Gen-0.6B",
+            status="success"
+        ).inc()
 
         return GuardResponse(
             is_safe=is_safe,
@@ -465,6 +568,11 @@ async def guard_endpoint(request: GuardRequest):
 
     except Exception as e:
         logger.error(f"❌ Guardrails error: {e}")
+        model_inference_total.labels(
+            model_type="guardrails",
+            model_name="Qwen3Guard-Gen-0.6B",
+            status="error"
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -483,9 +591,8 @@ async def stt_endpoint(
         raise HTTPException(status_code=503, detail="Models not loaded")
 
     audio_path = None
+    start_time = time.time()
     try:
-        start_time = time.time()
-
         # Save uploaded file temporarily
         audio_dir = Path("/tmp/audio")
         audio_dir.mkdir(parents=True, exist_ok=True)
@@ -559,6 +666,18 @@ async def stt_endpoint(
         logger.info(
             f"✅ STT complete: length={len(full_text)}, segments={len(segment_list)}, duration={duration:.3f}s"
         )
+        
+        # Record metrics
+        model_inference_duration_seconds.labels(
+            model_type="stt",
+            model_name="whisper-turbo"
+        ).observe(duration)
+        
+        model_inference_total.labels(
+            model_type="stt",
+            model_name="whisper-turbo",
+            status="success"
+        ).inc()
 
         return SttResponse(
             text=full_text,
@@ -570,6 +689,11 @@ async def stt_endpoint(
 
     except Exception as e:
         logger.error(f"❌ STT error: {e}")
+        model_inference_total.labels(
+            model_type="stt",
+            model_name="whisper-turbo",
+            status="error"
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:

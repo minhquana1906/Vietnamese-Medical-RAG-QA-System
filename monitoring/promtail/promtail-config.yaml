@@ -9,23 +9,25 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # Scrape backend FastAPI logs
-  - job_name: backend
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: backend
-          __path__: /var/log/backend/*.log
-
-  # Scrape Docker container logs
-  - job_name: docker
+  # Auto-collect all Docker container logs
+  - job_name: docker_containers
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
+        refresh_interval: 10s
     relabel_configs:
+      # Extract container name
       - source_labels: ['__meta_docker_container_name']
-        regex: '/(.*)'
+        regex: '/(.*)'  
         target_label: 'container'
+      # Extract container ID
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      # Extract compose service name
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      # Extract compose project
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'project'
+      # Extract log stream (stdout/stderr)
       - source_labels: ['__meta_docker_container_log_stream']
         target_label: 'stream'

@@ -23,7 +23,12 @@ settings = get_backend_settings()
 router = APIRouter(prefix="/v1", tags=["Audio & Speech"])
 
 # Import metrics from centralized module
-from ..core.metrics import model_inference_duration_seconds
+from ..core.metrics import (
+    model_inference_duration_seconds,
+    voice_request_duration_seconds,
+    audio_rag_stage_duration_seconds,
+    voice_request_errors_total,
+)
 
 # Audio storage directory
 AUDIO_DIR = Path("/tmp/audio")
@@ -43,9 +48,8 @@ async def speech_to_text(
     Accepts audio files in various formats (WAV, MP3, OGG, Opus, etc.)
     Returns transcribed text with metadata
     """
+    start_time = time.time()
     try:
-        start_time = time.time()
-
         # Save uploaded file
         audio_path = (
             AUDIO_DIR
@@ -84,7 +88,15 @@ async def speech_to_text(
 
     except Exception as e:
         logger.error(f"STT failed: {e}")
+        voice_request_errors_total.labels(
+            endpoint="stt",
+            error_type=type(e).__name__
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        voice_request_duration_seconds.labels(endpoint="stt").observe(
+            time.time() - start_time
+        )
 
 
 @router.post("/models/tts")
@@ -96,9 +108,8 @@ async def text_to_speech(request: TtsRequest):
 
     Returns audio file in MP3 format
     """
+    start_time = time.time()
     try:
-        start_time = time.time()
-
         # Synthesize using TTS service (ElevenLabs API)
         tts_service = TtsService()
         audio_bytes = await tts_service.synthesize_speech(
@@ -142,7 +153,15 @@ async def text_to_speech(request: TtsRequest):
 
     except Exception as e:
         logger.error(f"TTS failed: {e}")
+        voice_request_errors_total.labels(
+            endpoint="tts",
+            error_type=type(e).__name__
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        voice_request_duration_seconds.labels(endpoint="tts").observe(
+            time.time() - start_time
+        )
 
 
 @router.post("/rag/audio", response_model=AudioRagResponse)
@@ -160,7 +179,7 @@ def audio_rag_query(
     Pipeline: Audio input → STT → RAG → TTS → Audio output
     Returns both text response and audio file URL
     """
-    start_time = time.time()
+    request_start = time.time()
 
     try:
         # Step 1: Speech-to-Text
@@ -183,6 +202,7 @@ def audio_rag_query(
         transcript = stt_result_dict["text"]  # Access dict properly
 
         stt_duration = time.time() - stt_start
+        audio_rag_stage_duration_seconds.labels(stage="stt").observe(stt_duration)
         logger.info(f"✅ STT completed in {stt_duration:.3f}s: '{transcript[:50]}...'")
 
         # Cleanup audio
@@ -201,6 +221,7 @@ def audio_rag_query(
         )
 
         rag_duration = time.time() - rag_start
+        audio_rag_stage_duration_seconds.labels(stage="rag").observe(rag_duration)
         logger.info(f"✅ Speech RAG completed in {rag_duration:.3f}s")
 
         # Step 3: Text-to-Speech
@@ -230,9 +251,10 @@ def audio_rag_query(
             f.write(audio_bytes)
 
         tts_duration = time.time() - tts_start
+        audio_rag_stage_duration_seconds.labels(stage="tts").observe(tts_duration)
         logger.info(f"✅ TTS completed in {tts_duration:.3f}s")
 
-        total_duration = time.time() - start_time
+        total_duration = time.time() - request_start
 
         return AudioRagResponse(
             thread_id=thread_id,  # ✅ Added missing field
@@ -252,7 +274,15 @@ def audio_rag_query(
 
     except Exception as e:
         logger.error(f"Audio RAG failed: {e}")
+        voice_request_errors_total.labels(
+            endpoint="audio_rag",
+            error_type=type(e).__name__
+        ).inc()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        voice_request_duration_seconds.labels(endpoint="audio_rag").observe(
+            time.time() - request_start
+        )
 
 
 @router.get("/audio/{filename}")

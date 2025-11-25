@@ -41,3 +41,24 @@ groups:
         annotations:
           summary: "Model serving instance down"
           description: "{{ $labels.job }} is down"
+      
+      # High model inference latency
+      - alert: HighModelInferenceLatency
+        expr: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High model inference latency"
+          description: "P95 latency for {{ $labels.model_type }} is {{ $value }}s (threshold: 10s)"
+      
+      # High voice error rate
+      - alert: HighVoiceErrorRate
+        expr: rate(voice_request_errors_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High voice endpoint error rate"
+          description: "Voice endpoint {{ $labels.endpoint }} error rate is {{ $value }} errors/sec (threshold: 0.1)"
+

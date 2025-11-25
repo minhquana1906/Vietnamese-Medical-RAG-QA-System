@@ -3,6 +3,8 @@ import uuid
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from loguru import logger
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
@@ -19,6 +21,7 @@ from .services.rerank import get_qwen3_reranker
 from .core.guardrails import get_guardrails_service
 
 settings = get_backend_settings()
+tracer = trace.get_tracer(__name__)
 
 celery_app = get_celery_app(__name__)
 celery_app.autodiscover_tasks()
