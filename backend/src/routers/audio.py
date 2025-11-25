@@ -89,8 +89,7 @@ async def speech_to_text(
     except Exception as e:
         logger.error(f"STT failed: {e}")
         voice_request_errors_total.labels(
-            endpoint="stt",
-            error_type=type(e).__name__
+            endpoint="stt", error_type=type(e).__name__
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -154,8 +153,7 @@ async def text_to_speech(request: TtsRequest):
     except Exception as e:
         logger.error(f"TTS failed: {e}")
         voice_request_errors_total.labels(
-            endpoint="tts",
-            error_type=type(e).__name__
+            endpoint="tts", error_type=type(e).__name__
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -275,8 +273,7 @@ def audio_rag_query(
     except Exception as e:
         logger.error(f"Audio RAG failed: {e}")
         voice_request_errors_total.labels(
-            endpoint="audio_rag",
-            error_type=type(e).__name__
+            endpoint="audio_rag", error_type=type(e).__name__
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:

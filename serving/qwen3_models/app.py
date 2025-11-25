@@ -188,7 +188,7 @@ async def startup_event():
     """Load models on startup"""
     logger.info("🚀 Starting Qwen3 Models GPU Service...")
     registry.load_models()
-    
+
     # Start GPU memory monitoring
     asyncio.create_task(update_gpu_memory_metrics())
 
@@ -201,26 +201,28 @@ async def update_gpu_memory_metrics():
                 for i in range(torch.cuda.device_count()):
                     device_name = f"cuda:{i}"
                     allocated = torch.cuda.memory_allocated(i)
-                    
+
                     # Update metrics for each model type
                     gpu_memory_used_bytes.labels(
                         device=device_name, model_type="embedding"
-                    ).set(allocated * 0.25)  # Approximate split
-                    
+                    ).set(
+                        allocated * 0.25
+                    )  # Approximate split
+
                     gpu_memory_used_bytes.labels(
                         device=device_name, model_type="reranker"
                     ).set(allocated * 0.25)
-                    
+
                     gpu_memory_used_bytes.labels(
                         device=device_name, model_type="guardrails"
                     ).set(allocated * 0.25)
-                    
+
                     gpu_memory_used_bytes.labels(
                         device=device_name, model_type="stt"
                     ).set(allocated * 0.25)
         except Exception as e:
             logger.warning(f"Failed to update GPU metrics: {e}")
-        
+
         await asyncio.sleep(30)  # Update every 30 seconds
 
 
@@ -352,17 +354,14 @@ async def embed_endpoint(request: EmbedRequest):
         logger.debug(
             f"✅ Embedded {len(request.texts)} texts in {duration:.3f}s on {DEVICE}"
         )
-        
+
         # Record metrics
         model_inference_duration_seconds.labels(
-            model_type="embedding",
-            model_name="Qwen3-Embedding-0.6B"
+            model_type="embedding", model_name="Qwen3-Embedding-0.6B"
         ).observe(duration)
-        
+
         model_inference_total.labels(
-            model_type="embedding",
-            model_name="Qwen3-Embedding-0.6B",
-            status="success"
+            model_type="embedding", model_name="Qwen3-Embedding-0.6B", status="success"
         ).inc()
 
         return EmbedResponse(
@@ -373,9 +372,7 @@ async def embed_endpoint(request: EmbedRequest):
     except Exception as e:
         logger.error(f"❌ Embedding error: {e}")
         model_inference_total.labels(
-            model_type="embedding",
-            model_name="Qwen3-Embedding-0.6B",
-            status="error"
+            model_type="embedding", model_name="Qwen3-Embedding-0.6B", status="error"
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -427,17 +424,14 @@ async def rerank_endpoint(request: RerankRequest):
         logger.debug(
             f"✅ Reranked {len(request.documents)} docs in {duration:.3f}s on {DEVICE}"
         )
-        
+
         # Record metrics
         model_inference_duration_seconds.labels(
-            model_type="reranker",
-            model_name="Qwen3-Reranker-0.6B"
+            model_type="reranker", model_name="Qwen3-Reranker-0.6B"
         ).observe(duration)
-        
+
         model_inference_total.labels(
-            model_type="reranker",
-            model_name="Qwen3-Reranker-0.6B",
-            status="success"
+            model_type="reranker", model_name="Qwen3-Reranker-0.6B", status="success"
         ).inc()
 
         return RerankResponse(
@@ -449,9 +443,7 @@ async def rerank_endpoint(request: RerankRequest):
     except Exception as e:
         logger.error(f"❌ Reranking error: {e}")
         model_inference_total.labels(
-            model_type="reranker",
-            model_name="Qwen3-Reranker-0.6B",
-            status="error"
+            model_type="reranker", model_name="Qwen3-Reranker-0.6B", status="error"
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -544,17 +536,14 @@ async def guard_endpoint(request: GuardRequest):
         logger.debug(
             f"✅ Guard check in {duration:.3f}s: safe={is_safe}, severity={severity}"
         )
-        
+
         # Record metrics
         model_inference_duration_seconds.labels(
-            model_type="guardrails",
-            model_name="Qwen3Guard-Gen-0.6B"
+            model_type="guardrails", model_name="Qwen3Guard-Gen-0.6B"
         ).observe(duration)
-        
+
         model_inference_total.labels(
-            model_type="guardrails",
-            model_name="Qwen3Guard-Gen-0.6B",
-            status="success"
+            model_type="guardrails", model_name="Qwen3Guard-Gen-0.6B", status="success"
         ).inc()
 
         return GuardResponse(
@@ -569,9 +558,7 @@ async def guard_endpoint(request: GuardRequest):
     except Exception as e:
         logger.error(f"❌ Guardrails error: {e}")
         model_inference_total.labels(
-            model_type="guardrails",
-            model_name="Qwen3Guard-Gen-0.6B",
-            status="error"
+            model_type="guardrails", model_name="Qwen3Guard-Gen-0.6B", status="error"
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -666,17 +653,14 @@ async def stt_endpoint(
         logger.info(
             f"✅ STT complete: length={len(full_text)}, segments={len(segment_list)}, duration={duration:.3f}s"
         )
-        
+
         # Record metrics
         model_inference_duration_seconds.labels(
-            model_type="stt",
-            model_name="whisper-turbo"
+            model_type="stt", model_name="whisper-turbo"
         ).observe(duration)
-        
+
         model_inference_total.labels(
-            model_type="stt",
-            model_name="whisper-turbo",
-            status="success"
+            model_type="stt", model_name="whisper-turbo", status="success"
         ).inc()
 
         return SttResponse(
@@ -690,9 +674,7 @@ async def stt_endpoint(
     except Exception as e:
         logger.error(f"❌ STT error: {e}")
         model_inference_total.labels(
-            model_type="stt",
-            model_name="whisper-turbo",
-            status="error"
+            model_type="stt", model_name="whisper-turbo", status="error"
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
 
