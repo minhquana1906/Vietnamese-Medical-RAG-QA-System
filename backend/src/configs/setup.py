@@ -35,7 +35,7 @@ class BackendSettings(BaseSettings):
         default=os.getenv("ELEVENLABS_VOICE_ID", "1rqNHUqUbBGpY3OyzPMI")
     )
     elevenlabs_model_id: str = Field(
-        default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+        default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_v3")
     )
     elevenlabs_stability: float = Field(
         default=float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
@@ -116,6 +116,14 @@ class BackendSettings(BaseSettings):
     )
     celery_result_backend: str = Field(
         default=os.getenv("CELERY_RESULT_BACKEND", "redis://redis_db:6379")
+    )
+
+    # Monitoring & Observability
+    tempo_endpoint: str = Field(
+        default=os.getenv("TEMPO_ENDPOINT", "http://tempo:4317")
+    )
+    tempo_enabled: bool = Field(
+        default=os.getenv("TEMPO_ENABLED", "true").lower() == "true"
     )
 
     # LLM and embedding model settings

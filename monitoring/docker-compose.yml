@@ -16,6 +16,11 @@ services:
       - "--web.console.templates=/etc/prometheus/consoles"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
+    env_file:
+      - .env
+    environment:
+      - VLLM_BASIC_AUTH_USERNAME=${VLLM_BASIC_AUTH_USERNAME:-}
+      - VLLM_BASIC_AUTH_PASSWORD=${VLLM_BASIC_AUTH_PASSWORD:-}
     networks:
       - medical_rag_network
 

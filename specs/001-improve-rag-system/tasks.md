@@ -258,7 +258,7 @@
 - [X] T126 [US6] Add /metrics endpoint in serving/qwen3_models/app.py (Prometheus exporter)
 - [X] T127 [US6] Instrument 4 model endpoints: /embed, /rerank, /guard, /stt với latency + count metrics
 - [X] T128 [US6] Add GPU memory tracking với background task (update every 30s)
-- [ ] T129 [US6] Restart GPU service: `cd serving/qwen3_models && docker compose restart`
+- [X] T129 [US6] Restart GPU service: `cd serving/qwen3_models && docker compose restart`
 
 **Voice Pipeline Instrumentation**:
 - [X] T130 [US6] Add voice metrics in backend/src/core/metrics.py (3 metrics: duration, stage_duration, errors)
@@ -268,23 +268,23 @@
 - [X] T132 [US6] Add OpenTelemetry tracer to backend/src/tasks.py
 - [X] T133 [US6] Create tracing utilities in backend/src/core/tracing.py
 - [X] T134 [US6] Add tracing to RAG router endpoint in backend/src/routers/rag.py (wraps RAG service)
-- [ ] T135 [US6] Restart backend: `cd backend && docker compose restart chatbot_api`
+- [X] T135 [US6] Restart backend: `cd backend && docker compose restart chatbot_api`
 
 **Dashboards**:
 - [X] T136 [US6] Create dashboards provisioning config: monitoring/grafana/dashboards/dashboards.yaml
 - [X] T137 [US6] Build custom Model Monitoring dashboard: monitoring/grafana/dashboards/model_monitoring.json (7 panels)
-- [ ] T138 [US6] Restart Grafana to import dashboards: `cd monitoring && docker compose restart grafana`
+- [X] T138 [US6] Restart Grafana to import dashboards: `cd monitoring && docker compose restart grafana`
 
 **Alerts**:
 - [X] T139 [US6] Update monitoring/prometheus/alerts.yml with 2 new rules (HighModelInferenceLatency, HighVoiceErrorRate)
-- [ ] T140 [US6] Reload Prometheus: `curl -X POST http://localhost:9090/-/reload`
+- [X] T140 [US6] Reload Prometheus: `curl -X POST http://localhost:9090/-/reload`
 
 **Verification**:
-- [ ] T141 [US6] Verify GPU metrics: `curl http://localhost:8002/metrics | grep model_inference`
-- [ ] T142 [US6] Verify voice metrics: `curl http://localhost:8000/metrics | grep voice_`
-- [ ] T143 [US6] Verify logs: Grafana Explore → Loki → `{job="docker_containers"}`
+- [X] T141 [US6] Verify GPU metrics: `curl http://localhost:8002/metrics | grep model_inference`
+- [X] T142 [US6] Verify voice metrics: `curl http://localhost:8000/metrics | grep voice_`
+- [X] T143 [US6] Verify logs: Grafana Explore → Loki → `{job="docker_containers"}`
 - [ ] T144 [US6] Verify RAG traces: Grafana Explore → Tempo → Service: chatbot_api
-- [ ] T145 [US6] Verify Model Monitoring dashboard showing data in all 7 panels
+- [X] T145 [US6] Verify Model Monitoring dashboard showing data in all 7 panels
 
 **Git Example**: `git commit -m "Add minimal MVP monitoring with full model metrics + voice pipeline observability"`
 
@@ -401,7 +401,7 @@
   - Metric thresholds (min_recall@5=0.7, min_faithfulness=0.8, max_latency_p95=5000ms)
   - LLM judge configuration (model, temperature, prompt templates)
   - Dataset paths and output directories
-- [ ] T167 [US8] Run full evaluation suite: `python backend/scripts/evaluate_rag.py --dataset backend/data/eval_dataset.jsonl --output backend/data/eval_results/`
+- [ ] T167 [US8] Run full evaluation suite: `python backend/scripts/evaluate_rag.py --dataset data/eval_dataset.jsonl --output data/eval_results/`
 - [ ] T168 [US8] Verify metrics meet quality thresholds:
   - Retrieval: Recall@5 >= 0.70, nDCG@5 >= 0.65, MRR >= 0.60
   - Generation: Faithfulness >= 0.80, Answer Relevance >= 0.75, Correctness >= 0.70

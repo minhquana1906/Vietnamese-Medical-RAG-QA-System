@@ -184,7 +184,7 @@
         "type": "prometheus",
         "uid": "prometheus-uid"
       },
-      "description": "분당 성공 요청 수",
+      "description": "\ubd84\ub2f9 \uc131\uacf5 \uc694\uccad \uc218",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -260,7 +260,7 @@
       },
       "targets": [
         {
-          "expr": "increase(vllm:request_success_total{job=\"vllm-service\", model_name!=\"\"}[1m])",
+          "expr": "increase(vllm:request_success_total{job=\"vllm\", model_name!=\"\"}[1m])",
           "legendFormat": "Success/min ({{model_name}}-{{pod}}-{{instance}})",
           "refId": "A"
         }
@@ -518,7 +518,7 @@
             "uid": "prometheus-uid"
           },
           "editorMode": "code",
-          "expr": "vllm:gpu_cache_usage_perc{model_name=\"$model_name\"}",
+          "expr": "vllm:kv_cache_usage_perc{model_name=\"$model_name\"}",
           "instant": false,
           "legendFormat": "GPU Cache Usage ({{pod}}-{{instance}})",
           "range": true,
@@ -710,7 +710,7 @@
         "type": "prometheus",
         "uid": "prometheus-uid"
       },
-      "description": "분당 전체 요청 수 (성공+실패 포함)",
+      "description": "\ubd84\ub2f9 \uc804\uccb4 \uc694\uccad \uc218 (\uc131\uacf5+\uc2e4\ud328 \ud3ec\ud568)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -786,7 +786,7 @@
       },
       "targets": [
         {
-          "expr": "increase(vllm:e2e_request_latency_seconds_count{job=\"vllm-service\", model_name!=\"\"}[1m])",
+          "expr": "increase(vllm:e2e_request_latency_seconds_count{job=\"vllm\", model_name!=\"\"}[1m])",
           "legendFormat": "Requests/min ({{model_name}}-{{pod}}-{{instance}})",
           "refId": "A"
         }
@@ -842,7 +842,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1e-09
         },
         "legend": {
           "show": true
@@ -935,7 +935,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1e-09
         },
         "legend": {
           "show": true
@@ -1149,7 +1149,7 @@
         "type": "prometheus",
         "uid": "prometheus-uid"
       },
-      "description": "누적 성공 요청 수",
+      "description": "\ub204\uc801 \uc131\uacf5 \uc694\uccad \uc218",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1225,7 +1225,7 @@
       },
       "targets": [
         {
-          "expr": "vllm:request_success_total{job=\"vllm-service\", model_name!=\"\"}",
+          "expr": "vllm:request_success_total{job=\"vllm\", model_name!=\"\"}",
           "legendFormat": "Success Total ({{model_name}})",
           "refId": "A"
         }

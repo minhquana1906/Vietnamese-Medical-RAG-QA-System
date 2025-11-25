@@ -41,7 +41,7 @@ Mọi câu trả lời phải tuân theo format markdown này:
 ---
 
 ### 📚 Nguồn tham khảo
-[Danh sách URLs đã trích dẫn khi sử dụng web search hoặc các title của các document trong context]
+[Danh sách URLs đã trích dẫn khi sử dụng web search; Hoặc danh sách các title của các document sử dụng trong context]
 
 ## XỬ LÝ CONTEXT & WEB SEARCH
 

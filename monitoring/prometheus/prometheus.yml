@@ -3,7 +3,7 @@ global:
   evaluation_interval: 15s
   external_labels:
     cluster: 'medical-rag-cluster'
-    environment: 'production'
+    environment: 'development'
 
 # Alertmanager configuration (optional)
 alerting:
@@ -27,15 +27,18 @@ scrape_configs:
   - job_name: 'backend'
     static_configs:
       - targets: ['chatbot_api:8000']
-    metrics_path: '/metrics'
+    metrics_path: '/metrics/'
     scrape_interval: 10s
 
-  # vLLM model serving
+  # vLLM model serving (remote server with Bearer token)
   - job_name: 'vllm'
     static_configs:
       - targets: ['171.246.102.252:65302']
     metrics_path: '/metrics'
     scrape_interval: 10s
+    authorization:
+      type: Bearer
+      credentials: e464ba6d330ccf5e5ed38c2384104a929c75a7f38c4e159e9c470969e47b155a
 
   # GPU service (Qwen3 models + Whisper-turbo)
   - job_name: 'gpu_service'
