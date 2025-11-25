@@ -106,39 +106,36 @@ def on_startup():
         except Exception as e:
             logger.warning(f"⚠️  Failed to initialize TTS service: {e}")
 
-        # Warm up generation model (vLLM) to reduce first request latency
         try:
             from .services.brain import qwen3_chat_complete, check_vllm_health
 
             logger.info("🔥 Warming up generation model (vLLM)...")
 
-            # Check if vLLM is healthy first
-            if check_vllm_health():
-                warmup_messages = [
-                    {
-                        "role": "system",
-                        "content": "Bạn là Meddy - trợ lý y tế thông minh.",
-                    },
-                    {"role": "user", "content": "Chào Meddy!"},
-                ]
+            # if check_vllm_health():
+            warmup_messages = [
+                {
+                    "role": "system",
+                    "content": "Bạn là Meddy - trợ lý y tế thông minh.",
+                },
+                {"role": "user", "content": "Chào Meddy!"},
+            ]
 
-                # Send a short warmup request
-                response = qwen3_chat_complete(
-                    messages=warmup_messages,
-                    temperature=0.7,
-                    max_tokens=10,
-                    use_fallback=False,
-                )
+            # Send a short warmup request
+            response = qwen3_chat_complete(
+                messages=warmup_messages,
+                temperature=0.7,
+                max_tokens=10,
+                use_fallback=False,
+            )
 
-                if response:
-                    logger.info("✅ Generation model warmed up successfully")
-                else:
-                    logger.warning("⚠️  Generation model warmup returned empty response")
+            if response:
+                logger.info("✅ Generation model warmed up successfully")
             else:
-                logger.warning("⚠️  vLLM service not healthy, skipping warmup")
+                logger.warning("⚠️  Generation model warmup returned empty response")
+            # else:
+            #     logger.warning("⚠️  vLLM service not healthy, skipping warmup")
         except Exception as e:
             logger.warning(f"⚠️  Failed to warm up generation model: {e}")
-            # Don't raise - warmup failure shouldn't prevent app startup
 
         logger.info("Application startup complete.")
     except Exception as e:

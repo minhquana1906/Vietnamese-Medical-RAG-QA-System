@@ -33,7 +33,7 @@ scrape_configs:
   # vLLM model serving
   - job_name: 'vllm'
     static_configs:
-      - targets: ['171.246.102.252:65484']
+      - targets: ['171.246.102.252:65302']
     metrics_path: '/metrics'
     scrape_interval: 10s
 

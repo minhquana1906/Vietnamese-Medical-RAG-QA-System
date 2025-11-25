@@ -45,7 +45,7 @@ async def embed_endpoint(request: EmbedRequest):
 
         # Delegate to embedding service (auto-routes to GPU or CPU)
         embedding_service = Qwen3EmbeddingService()
-        embeddings = await embedding_service.embed_batch(
+        embeddings = await embedding_service.embed_batch_documents(
             texts=request.texts,
             normalize=request.normalize,
             is_query=request.is_query,
@@ -149,14 +149,14 @@ async def guard_endpoint(request: GuardRequest):
         guardrails_service = Qwen3GuardService()
 
         if request.check_type == "input":
-            result = await guardrails_service.check_input(text=request.text)
+            result = await guardrails_service.validate_query(text=request.text)
         elif request.check_type == "output":
             if not request.query:
                 raise HTTPException(
                     status_code=400,
                     detail="query is required for output safety check",
                 )
-            result = await guardrails_service.check_output(
+            result = await guardrails_service.validate_response(
                 query=request.query, response=request.text
             )
         else:

@@ -1,105 +1,164 @@
 {
-  "dashboard": {
-    "title": "RAG System - Model Performance",
-    "tags": ["models", "rag", "voice", "monitoring"],
-    "timezone": "browser",
-    "schemaVersion": 39,
-    "panels": [
-      {
-        "id": 1,
-        "title": "Model Inference Latency (p95)",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket[5m]))",
-            "legendFormat": "{{model_type}} - {{model_name}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+  "title": "RAG System - Model Performance",
+  "tags": ["models", "rag", "voice", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "uid": "model-monitoring",
+  "id": null,
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
       },
-      {
-        "id": 2,
-        "title": "Model Request Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(model_inference_total[5m])",
-            "legendFormat": "{{model_type}} - {{status}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
-      },
-      {
-        "id": 3,
-        "title": "GPU Memory Usage",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "gpu_memory_used_bytes",
-            "legendFormat": "{{device}} - {{model_type}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
-      },
-      {
-        "id": 4,
-        "title": "Model Error Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(model_inference_total{status=\"error\"}[5m])",
-            "legendFormat": "{{model_type}} errors",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
-      },
-      {
-        "id": 5,
-        "title": "Voice Pipeline Latency Breakdown",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.95, rate(audio_rag_stage_duration_seconds_bucket[5m]))",
-            "legendFormat": "{{stage}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
-      },
-      {
-        "id": 6,
-        "title": "Voice Endpoint Request Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(voice_request_duration_seconds_count[5m])",
-            "legendFormat": "{{endpoint}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
-      },
-      {
-        "id": 7,
-        "title": "Recent Error Logs",
-        "type": "logs",
-        "targets": [
-          {
-            "expr": "{job=\"docker_containers\"} |~ \"(?i)error\"",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      "id": 1,
+      "title": "Model Inference Latency (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{model_type}} - {{model_name}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
       }
-    ],
-    "time": {
-      "from": "now-6h",
-      "to": "now"
     },
-    "refresh": "30s"
-  }
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "id": 2,
+      "title": "Model Request Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(model_inference_total[5m])",
+          "legendFormat": "{{model_type}} - {{status}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "id": 3,
+      "title": "GPU Memory Usage",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "gpu_memory_used_bytes",
+          "legendFormat": "{{device}} - {{model_type}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "id": 4,
+      "title": "Model Error Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(model_inference_total{status=\"error\"}[5m])",
+          "legendFormat": "{{model_type}} errors",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "id": 5,
+      "title": "Voice Pipeline Latency Breakdown",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(audio_rag_stage_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{stage}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "id": 6,
+      "title": "Voice Endpoint Request Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(voice_request_duration_seconds_count[5m])",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki-uid"
+      },
+      "id": 7,
+      "title": "Recent Error Logs",
+      "type": "logs",
+      "targets": [
+        {
+          "expr": "{job=\"docker_containers\"} |~ \"(?i)error\"",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+    }
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s"
 }

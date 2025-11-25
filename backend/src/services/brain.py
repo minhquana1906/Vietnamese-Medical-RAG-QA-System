@@ -126,7 +126,9 @@ def check_vllm_health() -> bool:
     """Check health of remote vLLM server."""
     try:
         vllm_url = get_vllm_url()
-        response = httpx.get(f"{vllm_url}/health", timeout=5.0)
+        req = f"{vllm_url}/version"
+        response = httpx.get(req, timeout=5.0)
+        logger.debug(f"Checking vLLM health at {req}")
         if response.status_code == 200:
             logger.debug(f"✅ Remote vLLM service is healthy: {vllm_url}")
             return True

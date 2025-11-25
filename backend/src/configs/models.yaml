@@ -42,6 +42,6 @@ models:
 serving:
   # vllm_url: "http://vllm:8000"  
   # vllm_api_key: "vllm"
-  vllm_url: "http://171.246.102.252:65484"  
-  vllm_api_key: "6c056bb2be9a2a6d5ee8d4bb8c5428f0b7ec89f2f670dc4a3e7551a1235e98ab"
+  vllm_url: "http://171.246.102.252:65302"  
+  vllm_api_key: "e464ba6d330ccf5e5ed38c2384104a929c75a7f38c4e159e9c470969e47b155a"
   
