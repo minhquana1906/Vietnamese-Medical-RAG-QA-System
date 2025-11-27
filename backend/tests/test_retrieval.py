@@ -2,9 +2,8 @@
 import uuid
 
 
-def test_retrieval_no_results(client, monkeypatch):
-    """Test handling when no documents are retrieved (TC-RET-03)."""
-    # Mock: empty retrieval result for ambiguous query
+def test_retrieval_no_results(client):
+    """When retrieval yields no documents, system should still respond gracefully."""
     query_payload = {
         "user_identifier": "test-user",
         "thread_id": str(uuid.uuid4()),
@@ -12,12 +11,13 @@ def test_retrieval_no_results(client, monkeypatch):
     }
 
     res = client.post("/v1/models/rag", json=query_payload)
-    # Should not crash; mocked response still returns 200
     assert res.status_code == 200
+    body = res.json()
+    assert "response" in body
 
 
 def test_retrieval_malformed_query(client):
-    """Test handling of malformed/ambiguous queries (TC-RET-02)."""
+    """Malformed/ambiguous queries should return a helpful response (not crash)."""
     query_payload = {
         "user_identifier": "test-user",
         "thread_id": str(uuid.uuid4()),
@@ -27,12 +27,11 @@ def test_retrieval_malformed_query(client):
     res = client.post("/v1/models/rag", json=query_payload)
     assert res.status_code == 200
     body = res.json()
-    # Mocked response; real system would detect ambiguity and ask for clarification
-    assert body.get("response") is not None
+    assert isinstance(body.get("response"), str)
 
 
 def test_retrieval_clear_query(client):
-    """Test retrieval with clear query (TC-RET-01)."""
+    """Clear medical queries should return non-empty response text."""
     query_payload = {
         "user_identifier": "test-user",
         "thread_id": str(uuid.uuid4()),
@@ -42,11 +41,11 @@ def test_retrieval_clear_query(client):
     res = client.post("/v1/models/rag", json=query_payload)
     assert res.status_code == 200
     body = res.json()
-    assert body.get("response")
+    assert isinstance(body.get("response"), str) and len(body.get("response")) > 0
 
 
 def test_retrieval_special_characters(client):
-    """Test retrieval handles special characters in query."""
+    """Special character queries should be handled without error."""
     query_payload = {
         "user_identifier": "test-user",
         "thread_id": str(uuid.uuid4()),
@@ -55,3 +54,5 @@ def test_retrieval_special_characters(client):
 
     res = client.post("/v1/models/rag", json=query_payload)
     assert res.status_code == 200
+    body = res.json()
+    assert "response" in body

@@ -15,6 +15,10 @@ def test_error_logging(client, caplog):
 
         res = client.post("/v1/models/rag", json=payload)
         # Should handle gracefully
+        assert res.status_code in (200, 422)
+        # If any warnings were emitted, ensure they are warnings (not exceptions)
+        for record in caplog.records:
+            assert record.levelname in ("WARNING", "ERROR", "INFO")
 
 
 def test_no_sensitive_data_in_logs(client, caplog):
@@ -27,12 +31,10 @@ def test_no_sensitive_data_in_logs(client, caplog):
         }
 
         res = client.post("/v1/models/rag", json=payload)
-
         # Check that token is not in log records
-        for record in caplog.records:
-            log_text = record.getMessage()
-            # Verify no exact token exposure (real system should mask tokens)
-            # This is a basic check; real system uses log filters
+        token = "secret_token_abc123xyz"
+        exposed = [r for r in caplog.records if token in r.getMessage()]
+        assert not exposed, "Sensitive token was found in logs"
 
 
 def test_slow_query_logging(client, caplog, monkeypatch):
@@ -68,8 +70,7 @@ def test_slow_query_logging(client, caplog, monkeypatch):
         res = client.post("/v1/models/rag", json=payload)
         assert res.status_code == 200
 
-        # Real system would emit a warning log if duration > 2s
-        # We verify the response includes timing metadata
+        # Verify response includes timing metadata
         body = res.json()
         assert body.get("metadata", {}).get("duration_seconds") is not None
 
@@ -85,6 +86,6 @@ def test_request_logging(client, caplog):
 
         res = client.post("/v1/models/rag", json=payload)
         assert res.status_code == 200
-
-        # In real system, logs would contain request/response info
-        # For testing, we just ensure no crashes
+        # In the mocked environment we may not capture request logs; ensure no sensitive info
+        for record in caplog.records:
+            assert "secret" not in record.getMessage().lower()

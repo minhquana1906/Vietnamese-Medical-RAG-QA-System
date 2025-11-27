@@ -1,5 +1,7 @@
 import uuid
-from fastapi import HTTPException
+import pytest
+
+
 
 
 def test_rag_validation_missing_fields(client):
@@ -29,9 +31,10 @@ def test_rag_basic_flow(client):
     res = client.post("/v1/models/rag", json=payload)
     assert res.status_code == 200
     body = res.json()
-    assert "thread_id" in body
-    assert "response" in body
-    assert body["response"] == "Mocked response"
+    # Validate basic response shape
+    assert body.get("thread_id") == payload["thread_id"]
+    assert isinstance(body.get("response"), str)
+    assert "metadata" in body and "duration_seconds" in body["metadata"]
 
 
 def test_rag_unicode_query(client):
@@ -45,4 +48,5 @@ def test_rag_unicode_query(client):
     res = client.post("/v1/models/rag", json=payload)
     assert res.status_code == 200
     body = res.json()
-    assert body["response"]
+    assert isinstance(body.get("response"), str)
+    assert payload["thread_id"] == body.get("thread_id")

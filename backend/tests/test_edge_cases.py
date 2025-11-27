@@ -13,6 +13,8 @@ def test_rag_empty_query(client):
     res = client.post("/v1/models/rag", json=payload)
     # Should handle empty query gracefully
     assert res.status_code in (200, 400, 422)
+    if res.status_code == 200:
+        assert "response" in res.json()
 
 
 def test_rag_very_long_query(client):
@@ -26,6 +28,8 @@ def test_rag_very_long_query(client):
     res = client.post("/v1/models/rag", json=payload)
     # Should handle long query without crash (TC-CHAT-05)
     assert res.status_code in (200, 413)
+    if res.status_code == 200:
+        assert "response" in res.json()
 
 
 def test_rag_special_characters(client):
@@ -37,6 +41,7 @@ def test_rag_special_characters(client):
     }
     res = client.post("/v1/models/rag", json=payload)
     assert res.status_code == 200
+    assert isinstance(res.json().get("response"), str)
 
 
 def test_rag_sql_injection_attempt(client):
@@ -49,6 +54,8 @@ def test_rag_sql_injection_attempt(client):
     res = client.post("/v1/models/rag", json=payload)
     # Should safely handle and not execute SQL
     assert res.status_code == 200
+    body = res.json()
+    assert "response" in body
 
 
 def test_rag_with_null_values(client):
