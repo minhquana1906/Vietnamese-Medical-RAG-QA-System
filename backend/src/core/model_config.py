@@ -36,34 +36,16 @@ def get_generation_model() -> str:
     return config["models"]["generation"]["active"]
 
 
-def get_generation_fallback() -> str:
-    """Get fallback generation model."""
-    config = load_model_config()
-    return config["models"]["generation"]["fallback"]
-
-
 def get_embedding_model() -> str:
     """Get active embedding model HuggingFace repo ID."""
     config = load_model_config()
     return config["models"]["embedding"]["active"]
 
 
-def get_embedding_fallback() -> str:
-    """Get fallback embedding model."""
-    config = load_model_config()
-    return config["models"]["embedding"]["fallback"]
-
-
 def get_reranking_model() -> str:
     """Get active reranking model HuggingFace repo ID."""
     config = load_model_config()
     return config["models"]["reranking"]["active"]
-
-
-def get_reranking_fallback() -> str:
-    """Get fallback reranking model."""
-    config = load_model_config()
-    return config["models"]["reranking"]["fallback"]
 
 
 def get_guardrails_model() -> str:

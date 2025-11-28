@@ -9,7 +9,6 @@ from openai import OpenAI
 from ..configs.setup import get_backend_settings
 from ..core.model_config import (
     get_generation_model,
-    get_generation_fallback,
     get_vllm_url,
     get_vllm_api_key,
 )
@@ -18,16 +17,7 @@ settings = get_backend_settings()
 
 
 def get_vllm_client():
-    """
-    Get remote vLLM client from config.
-    Generation model is served on remote server (not local).
-
-    Note: Timeout calculation:
-    - max_tokens=4096 @ 26 tokens/s = ~160 seconds generation
-    - Input processing: ~10 seconds
-    - Safety margin: +30 seconds
-    - Total: 200 seconds minimum
-    """
+    """Get remote vLLM client from config."""
     try:
         vllm_url = get_vllm_url()
         vllm_api_key = get_vllm_api_key()
@@ -37,10 +27,9 @@ def get_vllm_client():
             base_url=f"{vllm_url}/v1",
             timeout=200.0,
         )
-        logger.debug(f"Initialized remote vLLM client at {vllm_url}")
         return client
     except Exception as e:
-        logger.error(f"Error initializing remote vLLM client: {e}")
+        logger.error(f"[GEN] vLLM client init failed: {e}")
         return None
 
 
@@ -49,75 +38,31 @@ def qwen3_chat_complete(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-    use_fallback: bool = True,
 ) -> Optional[str]:
-    """
-    Generate chat completion using remote vLLM server with Qwen3-4B-Instruct-2507.
-
-    Qwen Team Recommended Parameters:
-    - Temperature: 0.7
-    - TopP: 0.8
-    - TopK: 20
-    - MinP: 0
-    - Max Tokens: 1024 (sufficient for medical responses, reduces timeout risk)
-
-    Reference: https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
-
-    Args:
-        messages: Chat messages in OpenAI format
-        model: Model name (if None, uses config)
-        temperature: Sampling temperature (default: 0.7)
-        max_tokens: Max tokens to generate (default: 1024, medical responses typically 500-800 tokens)
-        use_fallback: Enable OpenAI fallback if remote vLLM fails
-
-    Note: Reduced max_tokens from 4096 → 1024 to prevent timeouts:
-    - 1024 tokens @ 26 tokens/s = ~40s generation (safe)
-    - 4096 tokens @ 26 tokens/s = ~160s generation (risky, causes retries)
-    """
-    # Use Qwen3 recommended parameters
+    """Generate chat completion using remote vLLM server with Qwen3-4B-Instruct-2507."""
     temperature = temperature if temperature is not None else 0.7
-    max_tokens = max_tokens if max_tokens is not None else 1024  # Reduced from 4096
+    max_tokens = max_tokens if max_tokens is not None else 2048
 
-    # Get active model from config if not specified
     if model is None:
         model = get_generation_model()
-        logger.debug(f"Using generation model: {model}")
 
-    # Try remote vLLM server first
     try:
         client = get_vllm_client()
         if client:
-            logger.debug(
-                f"Calling Qwen3-4B via vLLM: temp={temperature}, max_tokens={max_tokens}"
-            )
-
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                top_p=0.8,  # Qwen3 recommendation
-                # Note: vLLM may not support top_k and min_p yet
+                top_p=0.8,
             )
-
-            logger.debug(f"✅ Generated with remote vLLM: {model}")
             content: str = response.choices[0].message.content or ""
-            logger.debug(f"Generated {len(content)} chars")
             return content
     except Exception as e:
-        # Truncate error message if it's HTML (vLLM loading page)
         error_msg = str(e)
         if "<!DOCTYPE html>" in error_msg or "<html" in error_msg:
-            error_msg = "vLLM service is loading (HTML response received)"
-        logger.warning(f"❌ Remote vLLM failed ({model}): {error_msg}")
-
-    # Fallback to OpenAI
-    if use_fallback:
-        fallback_model = get_generation_fallback()
-        logger.info(f"🔄 Fallback to OpenAI: {fallback_model}")
-        return openai_chat_complete(
-            messages, temperature=temperature, max_tokens=max_tokens
-        )
+            error_msg = "vLLM service is loading"
+        logger.warning(f"[GEN] vLLM failed: {error_msg}")
 
     return None
 
@@ -126,19 +71,10 @@ def check_vllm_health() -> bool:
     """Check health of remote vLLM server."""
     try:
         vllm_url = get_vllm_url()
-        req = f"{vllm_url}/version"
-        response = httpx.get(req, timeout=5.0)
-        logger.debug(f"Checking vLLM health at {req}")
-        if response.status_code == 200:
-            logger.debug(f"✅ Remote vLLM service is healthy: {vllm_url}")
-            return True
+        response = httpx.get(f"{vllm_url}/version", timeout=5.0)
+        return response.status_code == 200
+    except Exception:
         return False
-    except Exception as e:
-        logger.warning(f"❌ Remote vLLM health check failed: {e}")
-        return False
-
-
-# ============= LEGACY OPENAI FUNCTIONS =============
 
 
 def get_openai_client():
@@ -149,41 +85,7 @@ def get_openai_client():
         client = OpenAI(api_key=api_key)
         return client
     except Exception as e:
-        logger.error(f"Error initializing OpenAI client: {e}")
-        raise
-
-
-def openai_generate_embedding(text, model=settings.openai_embedding_model):
-    try:
-        text = text.replace("\n", " ")
-        client = get_openai_client()
-        response = client.embeddings.create(
-            input=text, model=model, dimensions=settings.vector_dimension
-        )
-        return response.data[0].embedding
-    except Exception as e:
-        logger.error(f"Error generating embedding for {text}: {e}")
-        raise
-
-
-def openai_chat_complete(
-    messages,
-    model=settings.openai_model,
-    temperature=settings.temperature,
-    max_tokens=settings.max_tokens,
-) -> Optional[str]:
-    try:
-        client = get_openai_client()
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        content: Optional[str] = response.choices[0].message.content
-        return content
-    except Exception as e:
-        logger.error(f"Error generating response: {e}")
+        logger.error(f"[GEN] OpenAI client init failed: {e}")
         raise
 
 
@@ -197,22 +99,17 @@ def generate_conversation_text(conversations):
                 conversation_text += f"{role}: {content}\n"
         return conversation_text
     except Exception as e:
-        logger.error(f"Error generating conversation text: {e}")
+        logger.error(f"[GEN] Conversation text generation failed: {e}")
         raise
 
 
-# rewrite user question based on history and user msg
 def enhance_query_quality(history, message):
-    """
-    Enhance user query quality by rephrasing with conversation context.
-    Uses Qwen3 generation model.
-    """
+    """Enhance user query quality by rephrasing with conversation context."""
     try:
         history_messages = generate_conversation_text(history)
         enhanced_prompt = settings.rewrite_prompt.format(
             history_messages=history_messages, message=message
         )
-        logger.debug(f"Enhancing query with context (history length={len(history)})")
 
         messages = [
             {
@@ -222,25 +119,16 @@ def enhance_query_quality(history, message):
             {"role": "user", "content": enhanced_prompt},
         ]
 
-        # Use Qwen3 for query enhancement
-        enhanced_query = qwen3_chat_complete(messages, use_fallback=True)
-        logger.debug(f"Enhanced query: {enhanced_query[:80]}...")
-        return (
-            enhanced_query if enhanced_query else message
-        )  # Fallback to original message
+        enhanced_query = qwen3_chat_complete(messages)
+        return enhanced_query if enhanced_query else message
     except Exception as e:
-        logger.error(f"Error rewriting user question: {e}")
-        return message  # Fallback to original on error
+        logger.error(f"[GEN] Query enhancement failed: {e}")
+        return message
 
 
 def detect_route(history, message):
-    """
-    Detect conversation route (medical vs general).
-    Uses Qwen3 generation model.
-    """
+    """Detect conversation route (medical vs general)."""
     try:
-        logger.debug(f"Detecting route (history length={len(history)})")
-
         user_prompt = settings.intent_detection_prompt.format(
             history=history,
             message=message,
@@ -254,35 +142,21 @@ def detect_route(history, message):
             {"role": "user", "content": user_prompt},
         ]
 
-        # Use Qwen3 for route detection
-        route = qwen3_chat_complete(messages, use_fallback=True)
-        logger.info(f"🎯 Route detected: {route}")
-        return route if route else "medical"  # Default to medical route
+        route = qwen3_chat_complete(messages)
+        return route if route else "medical"
     except Exception as e:
-        logger.error(f"Error detecting route: {e}")
-        return "medical"  # Default fallback
+        logger.error(f"[GEN] Route detection failed: {e}")
+        return "medical"
 
 
 def get_tavily_agent_answer(messages):
-    """
-    Generate answer using Tavily web search with intelligent context management.
-
-    Args:
-        messages: Conversation history
-
-    Returns:
-        Generated response with citations
-
-    Note: Automatically summarizes long conversation history to prevent vLLM context overflow
-    """
+    """Generate answer using Tavily web search with intelligent context management."""
     try:
         from ..functions.web_search import functions_info, tavily_search
         from .summarizer import summarize_old_messages
 
-        logger.info("🔍 Using web search for additional context...")
         client = get_openai_client()
 
-        # First, call the function to determine search query
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -290,25 +164,10 @@ def get_tavily_agent_answer(messages):
             function_call={"name": "tavily_search"},
         )
 
-        # Extract search arguments
         args = json.loads(response.choices[0].message.function_call.arguments)
-        logger.debug(f"Search query: {args}")
-
-        # Perform web search (content is truncated in tavily_search function)
         observation = tavily_search(**args)
-        logger.debug(f"Web search returned {len(observation)} chars")
-
-        # INTELLIGENT CONTEXT MANAGEMENT:
-        # Instead of hard truncation, summarize old messages if conversation is too long
-        # Target budget: ~1500 tokens for history (leaves room for search + generation)
-        # - Search results: ~150 tokens (truncated in web_search.py)
-        # - System prompt: ~200 tokens
-        # - Generation: ~4096 tokens
-        # - History budget: ~1500 tokens (6000 chars)
-
         optimized_messages = summarize_old_messages(messages, target_tokens=1500)
 
-        # Add search results to conversation context
         enhanced_messages = [
             *optimized_messages,
             {"role": "function", "name": "tavily_search", "content": observation},
@@ -318,16 +177,12 @@ def get_tavily_agent_answer(messages):
             },
         ]
 
-        # Generate final response with citations using Qwen3
-        final_response = qwen3_chat_complete(enhanced_messages, use_fallback=True)
+        final_response = qwen3_chat_complete(enhanced_messages, max_tokens=1536)
 
         if not final_response:
-            logger.error("Failed to generate web search response")
             return "Xin lỗi, không thể tạo câu trả lời từ kết quả tìm kiếm."
-
-        logger.debug("Generated response with web search citations")
 
         return final_response
     except Exception as e:
-        logger.error(f"Error in tavily agent answer: {e}")
+        logger.error(f"[GEN] Tavily agent failed: {e}")
         return f"Xin lỗi, đã có lỗi xảy ra khi tìm kiếm thông tin: {str(e)}"

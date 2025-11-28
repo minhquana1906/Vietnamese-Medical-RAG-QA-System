@@ -64,7 +64,7 @@ async def call_rag_api(user_identifier: str, thread_id: str, query: str):
                 logger.error(f"RAG API missing 'response' field. Keys: {result.keys()}")
                 raise Exception("Invalid response format: missing 'response' field")
 
-            logger.info(
+            logger.success(
                 f"RAG API success: response_len={len(result.get('response', ''))}, has_sources={bool(result.get('sources'))}"
             )
             return result
@@ -135,7 +135,7 @@ async def call_stt_api(audio_file_path: str) -> dict:
                 response = await client.post(STT_ENDPOINT, files=files)
                 response.raise_for_status()
                 result = response.json()
-                logger.info(
+                logger.success(
                     f"STT API success: transcript_length={len(result.get('text', ''))}"
                 )
                 return result
@@ -230,7 +230,7 @@ async def call_audio_rag_api(
                 response = await client.post(AUDIO_RAG_ENDPOINT, files=files, data=data)
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"Audio RAG API success: {result.get('metadata', {})}")
+                logger.success(f"Audio RAG API success: {result.get('metadata', {})}")
                 return result
         except httpx.TimeoutException as e:
             logger.error(f"Audio RAG API timeout: {e}")

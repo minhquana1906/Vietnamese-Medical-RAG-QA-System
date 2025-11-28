@@ -18,7 +18,7 @@ TTS_CACHE_TTL = 86400  # 24 hours cache for generated audio
 # ElevenLabs API configuration
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
-DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "1rqNHUqUbBGpY3OyzPMI")
+DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "A5w1fw5x0uXded1LDvZp")
 
 
 class TtsService:

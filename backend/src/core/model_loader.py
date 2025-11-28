@@ -110,7 +110,7 @@ class ModelRegistry:
             self.guard_model.eval()
             logger.info(f"✅ Qwen3Guard loaded (3-tier severity, 9 categories)")
 
-            logger.info("🎉 All Qwen3 models loaded successfully!")
+            logger.success("🎉 All Qwen3 models loaded successfully!")
 
             # Warm-up models with dummy inference to avoid first-request slowness
             self._warmup_models()
@@ -143,7 +143,7 @@ class ModelRegistry:
             _ = self.check_safety(dummy_prompt, check_type="input")
             logger.debug("✅ Guardrails model warmed up")
 
-            logger.info("🔥 All models warmed up successfully!")
+            logger.success("🔥 All models warmed up successfully!")
 
         except Exception as e:
             logger.warning(f"⚠️  Model warm-up failed (not critical): {e}")

@@ -18,7 +18,7 @@ STT_CACHE_TTL = 3600  # 1 hour cache for transcripts
 
 # GPU service configuration
 QWEN3_MODELS_ENABLED = os.getenv("QWEN3_MODELS_ENABLED", "true").lower() == "true"
-QWEN3_SERVICE_URL = os.getenv("QWEN3_SERVICE_URL", "http://extra_models_gpu:8002")
+QWEN3_SERVICE_URL = os.getenv("QWEN3_SERVICE_URL", "http://extra_models:8002")
 
 
 class SttService:

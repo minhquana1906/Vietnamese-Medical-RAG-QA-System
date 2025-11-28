@@ -188,7 +188,7 @@ class Chunk(Base):
 def init_db():
     try:
         Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully.")
+        logger.success("Database tables created successfully.")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
         raise

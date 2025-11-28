@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import hashlib
 import asyncio
@@ -13,6 +14,16 @@ from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 from faster_whisper import WhisperModel, BatchedInferencePipeline
 from loguru import logger
 from prometheus_client import Gauge, Histogram, Counter, make_asgi_app
+
+# ============= LOGGING CONFIGURATION =============
+# Remove default logger and add colorized output
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <7}</level> | <level>{message}</level>",
+    level="INFO",
+    colorize=True,
+)
 
 # Initialize FastAPI
 app = FastAPI(
@@ -82,6 +93,10 @@ class ModelRegistry:
 
         self.reranker_model = None
         self.reranker_tokenizer = None
+        self.reranker_token_true_id = None
+        self.reranker_token_false_id = None
+        self.reranker_prefix_tokens = None
+        self.reranker_suffix_tokens = None
 
         self.guardrails_model = None
         self.guardrails_tokenizer = None
@@ -105,7 +120,7 @@ class ModelRegistry:
                 "EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"
             )
             self.embedding_tokenizer = AutoTokenizer.from_pretrained(
-                embedding_model_name
+                embedding_model_name, padding_side="left"
             )
             self.embedding_model = AutoModel.from_pretrained(
                 embedding_model_name,
@@ -115,18 +130,39 @@ class ModelRegistry:
             self.embedding_model.eval()
             logger.info(f"✅ Embedding model loaded on {self.device}")
 
-            # Load Reranker model
+            # Load Reranker model (MUST use AutoModelForCausalLM for yes/no generation)
+            # Reference: https://huggingface.co/Qwen/Qwen3-Reranker-0.6B
             logger.info("📦 Loading Qwen3-Reranker-0.6B...")
             reranker_model_name = os.getenv(
                 "RERANKER_MODEL", "Qwen/Qwen3-Reranker-0.6B"
             )
-            self.reranker_tokenizer = AutoTokenizer.from_pretrained(reranker_model_name)
-            self.reranker_model = AutoModel.from_pretrained(
+            self.reranker_tokenizer = AutoTokenizer.from_pretrained(
+                reranker_model_name, padding_side="left"
+            )
+            self.reranker_model = AutoModelForCausalLM.from_pretrained(
                 reranker_model_name,
                 trust_remote_code=True,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
             ).to(self.device)
             self.reranker_model.eval()
+
+            # Pre-compute token IDs for scoring (official Qwen3-Reranker method)
+            self.reranker_token_true_id = self.reranker_tokenizer.convert_tokens_to_ids(
+                "yes"
+            )
+            self.reranker_token_false_id = (
+                self.reranker_tokenizer.convert_tokens_to_ids("no")
+            )
+
+            # Pre-compute prefix/suffix tokens
+            prefix = '<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
+            suffix = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+            self.reranker_prefix_tokens = self.reranker_tokenizer.encode(
+                prefix, add_special_tokens=False
+            )
+            self.reranker_suffix_tokens = self.reranker_tokenizer.encode(
+                suffix, add_special_tokens=False
+            )
             logger.info(f"✅ Reranker model loaded on {self.device}")
 
             # Load Guardrails model (MUST use AutoModelForCausalLM for generation)
@@ -168,7 +204,7 @@ class ModelRegistry:
             )
 
             self.loaded = True
-            logger.info("🎉 All models loaded successfully!")
+            logger.success("🎉 All models loaded successfully!")
 
         except Exception as e:
             logger.error(f"❌ Failed to load models: {e}")
@@ -384,16 +420,34 @@ async def embed_endpoint(request: EmbedRequest):
 
 @app.post("/v1/models/rerank", response_model=RerankResponse)
 async def rerank_endpoint(request: RerankRequest):
-    """Rerank documents with Qwen3-Reranker"""
+    """
+    Rerank documents with Qwen3-Reranker using official method.
+
+    Reference: https://huggingface.co/Qwen/Qwen3-Reranker-0.6B
+
+    Method:
+    1. Format: <Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}
+    2. System prompt: "Judge whether the Document meets the requirements..."
+    3. Get logprobs for "yes" vs "no" tokens
+    4. Score = softmax(yes_logit, no_logit)[1]
+
+    Memory optimization:
+    - Process in mini-batches to avoid OOM
+    - Clear CUDA cache between batches
+    - Reduced max_length for efficiency
+    """
     if not registry.loaded:
         raise HTTPException(status_code=503, detail="Models not loaded")
 
     start_time = time.time()
+    max_length = 2048
+    mini_batch_size = 10  # Process 10 documents at a time to avoid OOM
+
     try:
-        # Prepare instruction
+        # Default instruction for medical RAG
         instruction = (
             request.instruction
-            or "Given a medical query, determine if the passage contains the answer"
+            or "Given a medical question in Vietnamese, retrieve relevant medical passages that provide accurate information to answer the question"
         )
 
         # Format pairs: <Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}
@@ -402,32 +456,79 @@ async def rerank_endpoint(request: RerankRequest):
             for doc in request.documents
         ]
 
-        # Tokenize
-        inputs = registry.reranker_tokenizer(
-            pairs,
-            padding=True,
-            truncation=True,
-            max_length=1536,
-            return_tensors="pt",
-        ).to(registry.device)
+        all_scores = []
 
-        # Get scores
-        with torch.no_grad():
-            outputs = registry.reranker_model(**inputs)
-            scores = outputs.last_hidden_state[:, 0, 0]  # Relevance score
-            scores = torch.sigmoid(scores)  # Normalize to [0, 1]
+        # Process in mini-batches to avoid OOM
+        for batch_start in range(0, len(pairs), mini_batch_size):
+            batch_end = min(batch_start + mini_batch_size, len(pairs))
+            batch_pairs = pairs[batch_start:batch_end]
 
-        # Sort by score
-        scores_list = scores.cpu().tolist()
-        sorted_pairs = sorted(enumerate(scores_list), key=lambda x: x[1], reverse=True)
+            # Tokenize with prefix/suffix (official method)
+            inputs = registry.reranker_tokenizer(
+                batch_pairs,
+                padding=False,
+                truncation=True,
+                return_attention_mask=False,
+                max_length=max_length
+                - len(registry.reranker_prefix_tokens)
+                - len(registry.reranker_suffix_tokens),
+            )
+
+            # Add prefix and suffix tokens
+            for i, input_ids in enumerate(inputs["input_ids"]):
+                inputs["input_ids"][i] = (
+                    registry.reranker_prefix_tokens
+                    + input_ids
+                    + registry.reranker_suffix_tokens
+                )
+
+            # Pad and convert to tensors
+            inputs = registry.reranker_tokenizer.pad(
+                inputs, padding=True, return_tensors="pt", max_length=max_length
+            )
+            inputs = {k: v.to(registry.device) for k, v in inputs.items()}
+
+            # Get logits for yes/no tokens (official scoring method)
+            with torch.no_grad():
+                outputs = registry.reranker_model(**inputs)
+                # Get logits at the last position
+                batch_logits = outputs.logits[:, -1, :]
+
+                # Extract yes/no logits
+                true_logits = batch_logits[:, registry.reranker_token_true_id]
+                false_logits = batch_logits[:, registry.reranker_token_false_id]
+
+                # Stack and apply log_softmax, then get probability of "yes"
+                stacked = torch.stack([false_logits, true_logits], dim=1)
+                log_probs = torch.nn.functional.log_softmax(stacked, dim=1)
+                batch_scores = log_probs[:, 1].exp()  # P(yes)
+
+                all_scores.extend(batch_scores.cpu().tolist())
+
+            # Clear tensors and CUDA cache to free memory
+            del (
+                inputs,
+                outputs,
+                batch_logits,
+                true_logits,
+                false_logits,
+                stacked,
+                log_probs,
+                batch_scores,
+            )
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        # Sort by score descending
+        sorted_pairs = sorted(enumerate(all_scores), key=lambda x: x[1], reverse=True)
 
         # Get top-n
         top_indices = [idx for idx, _ in sorted_pairs[: request.top_n]]
         top_scores = [score for _, score in sorted_pairs[: request.top_n]]
 
         duration = time.time() - start_time
-        logger.debug(
-            f"✅ Reranked {len(request.documents)} docs in {duration:.3f}s on {DEVICE}"
+        logger.info(
+            f"[RERANK] ✅ {len(request.documents)} docs → top scores: {[f'{s:.3f}' for s in top_scores[:3]]} | {duration:.3f}s"
         )
 
         # Record metrics

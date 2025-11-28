@@ -54,33 +54,19 @@ class Qwen3GuardService:
         local_url: Optional[str] = None,
         threshold: Optional[float] = None,
     ):
-        """
-        Initialize Qwen3Guard service.
-
-        Args:
-            local_url: Local FastAPI backend URL (defaults to settings.backend_api_url)
-            threshold: Safety threshold (not used in Qwen3Guard, kept for compatibility)
-        """
-        # Auto-detect GPU service if enabled (prioritize GPU for performance)
+        """Initialize Qwen3Guard service."""
         if settings.qwen3_models_enabled:
             self.local_url = local_url or settings.qwen3_models_url
-            logger.info(f"Using Qwen3 GPU service: {self.local_url}")
         else:
             self.local_url = local_url or settings.backend_api_url
-            logger.info(f"Using local CPU service: {self.local_url}")
+
         self.threshold = threshold or get_guardrails_threshold()
         self.huggingface_model = get_guardrails_model()
-
-        # TESTING MODE: Increase timeout for CPU inference (60s -> 180s)
         self.client = httpx.Client(timeout=180.0)
 
     def validate_query(self, query: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
         """
         Validate user input query using Qwen3Guard prompt moderation.
-
-        Qwen3Guard expects:
-        - Input: user query
-        - Output format: "Safety: {Safe|Unsafe|Controversial}\nCategories: {categories}"
 
         Returns:
             Tuple[bool, Optional[str], Optional[Dict]]:
@@ -88,19 +74,15 @@ class Qwen3GuardService:
                 - violation_category: First category of violation if any
                 - metadata: {severity, categories, details}
         """
-        # Check for empty query
         if not query or not query.strip():
-            logger.warning("Empty query blocked by guardrails")
             return False, "empty_query", {"reason": "Empty query"}
 
-        # Call Qwen3Guard model via local endpoint
         try:
             is_safe, severity, categories, refusal, details = self._check_with_local(
                 query, check_type="input"
             )
 
             if is_safe or severity == "Safe":
-                logger.debug(f"✅ Query passed Qwen3Guard: severity={severity}")
                 return (
                     True,
                     None,
@@ -111,7 +93,6 @@ class Qwen3GuardService:
                     },
                 )
 
-            # Query is unsafe or controversial
             violation_category = (
                 categories[0] if categories and categories[0] != "None" else "unknown"
             )
@@ -121,17 +102,10 @@ class Qwen3GuardService:
                 "details": details,
             }
 
-            logger.warning(
-                f"❌ Query BLOCKED by Qwen3Guard: severity={severity}, categories={categories}"
-            )
             return False, violation_category, metadata
 
         except Exception as e:
-            logger.error(f"❌ Qwen3Guard validation error: {e}")
-            # Fail open - allow query if guardrails service is down
-            logger.warning(
-                "⚠️  Guardrails service unavailable, ALLOWING query (fail-open)"
-            )
+            logger.warning(f"[GUARD] Service unavailable, fail-open: {e}")
             return True, None, {"error": str(e), "failover": True}
 
     def validate_response(
@@ -140,24 +114,13 @@ class Qwen3GuardService:
         """
         Validate LLM-generated response using Qwen3Guard response moderation.
 
-        Qwen3Guard expects:
-        - Input: [{"role": "user", "content": query}, {"role": "assistant", "content": response}]
-        - Output format: "Safety: {Safe|Unsafe|Controversial}\nCategories: {categories}\nRefusal: {Yes|No}"
-
-        Args:
-            response: The generated response to validate
-            query: Original user query (for context)
-            max_retries: Maximum retry attempts (for regeneration loop)
-
         Returns:
             Tuple[bool, Optional[str], Optional[Dict]]:
                 - is_valid: True if response is safe
                 - violation_category: First category of violation if any
                 - metadata: {severity, categories, refusal, retry_feedback, details}
         """
-        # Check for empty response
         if not response or not response.strip():
-            logger.warning("Empty response blocked by guardrails")
             return (
                 False,
                 "empty_response",
@@ -167,17 +130,12 @@ class Qwen3GuardService:
                 },
             )
 
-        # Call Qwen3Guard model via local endpoint
         try:
             is_safe, severity, categories, refusal, details = self._check_with_local(
                 response, check_type="output", query=query
             )
 
-            # Safe response or proper refusal
             if is_safe or severity == "Safe":
-                logger.debug(
-                    f"✅ Response passed Qwen3Guard: severity={severity}, refusal={refusal}"
-                )
                 return (
                     True,
                     None,
@@ -189,7 +147,6 @@ class Qwen3GuardService:
                     },
                 )
 
-            # Response is unsafe or controversial
             violation_category = (
                 categories[0] if categories and categories[0] != "None" else "unknown"
             )
@@ -200,45 +157,22 @@ class Qwen3GuardService:
                 "details": details,
             }
 
-            # Generate feedback for regeneration
             if max_retries > 0:
                 feedback = self._generate_regeneration_feedback(
                     violation_category, details, query, response
                 )
                 metadata["retry_feedback"] = feedback
 
-            logger.warning(
-                f"❌ Response BLOCKED by Qwen3Guard: severity={severity}, categories={categories}, refusal={refusal}"
-            )
             return False, violation_category, metadata
 
         except Exception as e:
-            logger.error(f"❌ Qwen3Guard response validation error: {e}")
-            # Fail open for response validation
-            logger.warning(
-                "⚠️  Guardrails service unavailable, ALLOWING response (fail-open)"
-            )
+            logger.warning(f"[GUARD] Service unavailable, fail-open: {e}")
             return True, None, {"error": str(e), "failover": True}
 
     def _check_with_local(
         self, text: str, check_type: str = "input", query: Optional[str] = None
     ) -> Tuple[bool, str, list, Optional[str], Dict]:
-        """
-        Check text safety using local FastAPI endpoint with Qwen3Guard-Gen-0.6B.
-
-        Args:
-            text: Text to check (query for input, response for output)
-            check_type: "input" (user query) or "output" (LLM response)
-            query: Original query (required for output moderation)
-
-        Returns:
-            Tuple[is_safe, severity, categories, refusal, details]
-            - is_safe: bool (True if severity == "Safe")
-            - severity: "Safe" | "Controversial" | "Unsafe"
-            - categories: List[str] of violation categories
-            - refusal: "Yes" | "No" | None (only for output)
-            - details: Dict with raw response and parsed data
-        """
+        """Check text safety using local FastAPI endpoint with Qwen3Guard-Gen-0.6B."""
         try:
             payload = {"text": text, "check_type": check_type}
             if check_type == "output" and query:
@@ -256,13 +190,6 @@ class Qwen3GuardService:
                 )
 
             result = response.json()
-
-            # Parse Qwen3Guard output
-            # Expected format:
-            # Safety: Safe|Unsafe|Controversial
-            # Categories: Violent|None|...
-            # Refusal: Yes|No (only for output)
-
             raw_output = result.get("raw_output", "")
             severity = self._parse_severity(raw_output)
             categories = self._parse_categories(raw_output)
@@ -270,23 +197,16 @@ class Qwen3GuardService:
                 self._parse_refusal(raw_output) if check_type == "output" else None
             )
 
-            # Determine is_safe based on severity
             is_safe = severity == "Safe"
-
             details = {
                 "raw_output": raw_output,
                 "model": self.huggingface_model,
             }
 
-            logger.debug(
-                f"Qwen3Guard check: severity={severity}, categories={categories}, "
-                f"refusal={refusal}, is_safe={is_safe}"
-            )
-
             return is_safe, severity, categories, refusal, details
 
         except Exception as e:
-            logger.error(f"❌ Qwen3Guard local check failed: {e}")
+            logger.error(f"[GUARD] Check failed: {e}")
             raise
 
     def _parse_severity(self, raw_output: str) -> str:
@@ -296,7 +216,7 @@ class Qwen3GuardService:
         )
         if match:
             return match.group(1).capitalize()
-        return "Safe"  # Default to Safe if parsing fails
+        return "Safe"
 
     def _parse_categories(self, raw_output: str) -> list:
         """Parse categories from Qwen3Guard output."""
@@ -305,7 +225,6 @@ class Qwen3GuardService:
         )
         if match:
             categories_str = match.group(1).strip()
-            # Split by comma, pipe, or newline
             categories = re.split(r"[,|\n]+", categories_str)
             return [cat.strip() for cat in categories if cat.strip()]
         return ["None"]
@@ -320,80 +239,49 @@ class Qwen3GuardService:
     def _generate_regeneration_feedback(
         self, category: str, details: Dict, query: str, response: str
     ) -> str:
-        """
-        Generate feedback for LLM to regenerate a safer response.
-
-        Args:
-            category: Violation category from Qwen3Guard
-            details: Violation details
-            query: Original user query
-            response: Blocked response
-
-        Returns:
-            Feedback string for LLM regeneration
-        """
-        # Map Qwen3Guard categories to feedback templates
+        """Generate feedback for LLM to regenerate a safer response."""
         feedback_templates = {
             "Violent": (
                 "The response contains potentially violent content. "
-                "Please revise to remove any references to violence, weapons, or dangerous activities. "
-                "Focus on providing safe, supportive information."
+                "Please revise to remove any references to violence, weapons, or dangerous activities."
             ),
             "Non-violent Illegal Acts": (
                 "The response provides guidance on illegal activities. "
-                "Please revise to comply with legal standards and avoid suggesting illegal actions."
+                "Please revise to comply with legal standards."
             ),
             "Sexual Content or Sexual Acts": (
                 "The response contains inappropriate sexual content. "
-                "Please revise to be professional and avoid any explicit sexual references."
+                "Please revise to be professional."
             ),
             "PII": (
                 "The response may violate privacy guidelines. "
-                "Please revise to avoid requesting or providing specific personal information. "
-                "Provide general guidance instead."
+                "Please revise to avoid personal information."
             ),
             "Suicide & Self-Harm": (
                 "The response contains harmful content related to self-harm. "
-                "Please revise to provide supportive, safe information and encourage seeking professional help."
+                "Please provide supportive, safe information."
             ),
             "Unethical Acts": (
-                "The response contains unethical content (bias, discrimination, hate speech). "
-                "Please revise to be respectful, unbiased, and professional."
+                "The response contains unethical content. "
+                "Please revise to be respectful and professional."
             ),
             "Politically Sensitive Topics": (
-                "The response may contain misinformation about political topics. "
-                "Please revise to provide factual, neutral information or acknowledge limitations."
+                "The response may contain misinformation. "
+                "Please provide factual, neutral information."
             ),
             "Copyright Violation": (
                 "The response may violate copyright. "
-                "Please revise to avoid reproducing copyrighted materials verbatim. "
-                "Summarize or paraphrase instead."
+                "Please summarize or paraphrase instead."
             ),
         }
 
-        base_feedback = feedback_templates.get(
+        return feedback_templates.get(
             category,
-            "The response does not meet safety guidelines. Please revise to be safer and more appropriate.",
+            "The response does not meet safety guidelines. Please revise to be safer.",
         )
 
-        # Add specific details if available
-        raw_output = details.get("raw_output", "")
-        if raw_output:
-            base_feedback += f"\n\nDetails: {raw_output[:200]}"
-
-        return base_feedback
-
     def get_rejection_message(self, category: str, language: str = "vi") -> str:
-        """
-        Get user-facing rejection message based on violation category.
-
-        Args:
-            category: Violation category from Qwen3Guard
-            language: Language for message (vi or en)
-
-        Returns:
-            User-facing rejection message
-        """
+        """Get user-facing rejection message based on violation category."""
         messages_vi = {
             "Violent": "Xin lỗi, tôi không thể trả lời các câu hỏi liên quan đến bạo lực hoặc vũ khí.",
             "Non-violent Illegal Acts": "Xin lỗi, tôi không thể cung cấp hướng dẫn về các hoạt động bất hợp pháp.",
@@ -433,16 +321,8 @@ class Qwen3GuardService:
         """Check if Qwen3Guard service is healthy."""
         try:
             response = self.client.get(f"{self.local_url}/v1/ready", timeout=5.0)
-            if response.status_code == 200:
-                logger.info("✅ Qwen3Guard service is healthy")
-                return True
-            else:
-                logger.warning(
-                    f"⚠️  Qwen3Guard health check failed: {response.status_code}"
-                )
-                return False
-        except Exception as e:
-            logger.error(f"❌ Qwen3Guard health check error: {e}")
+            return response.status_code == 200
+        except Exception:
             return False
 
 

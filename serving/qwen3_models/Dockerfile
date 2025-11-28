@@ -16,6 +16,9 @@ RUN uv pip install --system --no-cache -r /app/requirements.txt
 # We link the nvidia libraries from site-packages to /usr/lib/x86_64-linux-gnu/
 RUN python3 -c "import site; import os; packages_path = site.getsitepackages()[0]; os.system(f'ln -sf {packages_path}/nvidia/cudnn/lib/libcudnn* /usr/lib/x86_64-linux-gnu/ && ln -sf {packages_path}/nvidia/cublas/lib/libcublas* /usr/lib/x86_64-linux-gnu/')" || true
 
+# CUDA memory optimization to avoid OOM
+ENV PYTORCH_ALLOC_CONF=expandable_segments:True
+
 EXPOSE 8002
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "1"]

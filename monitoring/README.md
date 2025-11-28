@@ -123,7 +123,7 @@ curl http://localhost:8002/metrics | head -50
 
 **vLLM metrics** (requires auth):
 ```bash
-curl -u username:password http://171.246.102.252:65302/metrics | head -50
+curl -u username:password http://171.248.40.12:44624/metrics | head -50
 ```
 
 ### 5. Access Dashboards
@@ -274,7 +274,7 @@ docker logs chatbot_api --tail 50
 **If vLLM target is DOWN**:
 ```bash
 # Check credentials
-curl -u username:password http://171.246.102.252:65302/metrics
+curl -u username:password http://171.248.40.12:44624/metrics
 
 # Verify prometheus env vars
 docker exec prometheus env | grep VLLM

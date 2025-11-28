@@ -31,12 +31,12 @@ def load_vietnamese_medical_corpus(
 
         dataset.save_to_disk(str(dataset_path))
 
-        logger.info(
-            f"✓ Successfully loaded quannguyen204/vietnamese_medical_corpus_dataset"
+        logger.success(
+            "✓ Successfully loaded quannguyen204/vietnamese_medical_corpus_dataset"
         )
-        logger.info(f"  Saved to: {dataset_path}")
-        logger.info(
-            f"  Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
+        logger.success(f"  Saved to: {dataset_path}")
+        logger.success(
+            "  Dataset URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
         )
 
         # Log split information
@@ -108,9 +108,9 @@ Dataset Information:
     logger.info("=" * 80)
     logger.info("Vietnamese Medical Corpus Dataset Loader")
     logger.info("=" * 80)
-    logger.info(f"Dataset: quannguyen204/vietnamese_medical_corpus_dataset")
+    logger.info("Dataset: quannguyen204/vietnamese_medical_corpus_dataset")
     logger.info(
-        f"URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
+        "URL: https://huggingface.co/datasets/quannguyen204/vietnamese_medical_corpus_dataset"
     )
     logger.info(f"Output directory: {output_dir}")
     if cache_dir:
@@ -123,7 +123,7 @@ Dataset Information:
 
         logger.info("")
         logger.info("=" * 80)
-        logger.info("✓ Dataset loaded successfully!")
+        logger.success("✓ Dataset loaded successfully!")
         logger.info("=" * 80)
         logger.info("")
         logger.info("Next steps:")

@@ -158,7 +158,7 @@ def on_startup():
 
                 model_registry = get_model_registry()
                 model_registry.load_models()
-                logger.info("✅ Local models loaded successfully")
+                logger.success("✅ Local models loaded successfully")
             except Exception as e:
                 logger.warning(f"⚠️  Failed to load local models: {e}")
 
@@ -190,7 +190,7 @@ def on_startup():
 
             if api_key:
                 initialize_tts_service(api_key=api_key, voice_id=voice_id)
-                logger.info("✅ TTS service initialized successfully")
+                logger.success("✅ TTS service initialized successfully")
             else:
                 logger.warning("⚠️  ElevenLabs API key not configured, TTS disabled")
         except Exception as e:
@@ -215,11 +215,10 @@ def on_startup():
                 messages=warmup_messages,
                 temperature=0.7,
                 max_tokens=10,
-                use_fallback=False,
             )
 
             if response:
-                logger.info("✅ Generation model warmed up successfully")
+                logger.success("✅ Generation model warmed up successfully")
             else:
                 logger.warning("⚠️  Generation model warmup returned empty response")
             # else:

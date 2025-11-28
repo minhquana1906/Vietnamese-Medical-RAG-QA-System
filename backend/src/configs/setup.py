@@ -32,7 +32,7 @@ class BackendSettings(BaseSettings):
     # TTS Configuration (ElevenLabs)
     elevenlabs_api_key: str = Field(default=os.getenv("ELEVENLABS_API_KEY", ""))
     elevenlabs_voice_id: str = Field(
-        default=os.getenv("ELEVENLABS_VOICE_ID", "1rqNHUqUbBGpY3OyzPMI")
+        default=os.getenv("ELEVENLABS_VOICE_ID", "A5w1fw5x0uXded1LDvZp")
     )
     elevenlabs_model_id: str = Field(
         default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_v3")

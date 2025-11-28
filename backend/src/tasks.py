@@ -8,6 +8,7 @@ from opentelemetry.trace import Status, StatusCode
 
 from .configs.celery_config import get_celery_app
 from .configs.setup import get_backend_settings
+from .configs.logging_config import get_rag_logger
 from .core.vectorize import search_vectors, upsert_points
 from .services.brain import (
     detect_route,
@@ -22,6 +23,7 @@ from .core.guardrails import get_guardrails_service
 
 settings = get_backend_settings()
 tracer = trace.get_tracer(__name__)
+rag_log = get_rag_logger()
 
 celery_app = get_celery_app(__name__)
 celery_app.autodiscover_tasks()
@@ -62,9 +64,6 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
         nodes = fixed_semantic_chunking(
             text=content, metadata={"doc_id": doc_id, "title": title}
         )
-        logger.info(
-            f"Document chunked into {len(nodes)} chunks using fixed semantic strategy"
-        )
 
         # Get services
         embedding_service = get_embedding_service()
@@ -85,19 +84,14 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
         page_number = metadata.get("page_number")
 
         # OPTIMIZATION: Generate embeddings in batch for better performance
-        logger.info(f"Generating embeddings for {len(nodes)} chunks in batch...")
         chunk_texts = [node.text for node in nodes]
         batch_embeddings = embedding_service.embed_batch_documents(
             documents=chunk_texts,
             batch_size=512,  # Large batch size for dataset ingestion
         )
-        logger.info(f"✅ Generated {len(batch_embeddings)} embeddings in batch")
 
         for chunk_index, (node, embedding) in enumerate(zip(nodes, batch_embeddings)):
             if not embedding:
-                logger.warning(
-                    f"Failed to generate embedding for chunk {chunk_index}: {node.text[:50]}..."
-                )
                 continue
 
             # Generate unique chunk ID
@@ -178,24 +172,17 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
                     chunk = Chunk(**chunk_data)
                     db.add(chunk)
                 db.commit()
-            logger.info(f"✅ Stored {len(db_chunks)} chunks in PostgreSQL")
 
         # Index to Qdrant (vector database) with enhanced metadata (T097)
         if qdrant_points:
             upsert_points(
                 qdrant_points, collection_name=settings.default_collection_name
             )
-            logger.info(
-                f"✅ Indexed {len(qdrant_points)} chunks to Qdrant with enhanced metadata"
-            )
-        else:
-            logger.warning(f"⚠️ No embeddings generated for document '{title}'")
 
         # Index to Elasticsearch (keyword search) with enhanced metadata (T098)
         if elasticsearch_docs:
-            indexed_count = 0
             for es_doc in elasticsearch_docs:
-                success = es_client.index_chunk(
+                es_client.index_chunk(
                     chunk_id=es_doc["chunk_id"],
                     document_id=es_doc["document_id"],
                     chunk_index=es_doc["chunk_index"],
@@ -206,22 +193,11 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
                     language=es_doc["language"],
                     metadata=es_doc["metadata"],
                 )
-                if success:
-                    indexed_count += 1
-
-            logger.info(
-                f"✅ Indexed {indexed_count}/{len(elasticsearch_docs)} chunks to Elasticsearch with enhanced metadata"
-            )
-
-        logger.info(
-            f"🎉 Dual indexing complete for document '{title}': "
-            f"{len(qdrant_points)} chunks → Qdrant (vector) + Elasticsearch (keyword)"
-        )
 
         return {"chunks_created": len(qdrant_points)}
 
     except Exception as e:
-        logger.error(f"❌ Error in chunking and indexing document: {e}")
+        logger.error(f"[CHUNK] ❌ Error indexing doc_id={doc_id}: {e}")
         raise
 
 
@@ -229,6 +205,11 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
 def bot_route_answer_message(history, question, system_prompt=None):
     """
     Route user message to appropriate handler (medical RAG or general chat).
+
+    Flow:
+    1. Validate user input with Qwen3Guard (BEFORE routing)
+    2. If invalid, return rejection message immediately
+    3. If valid, detect route and proceed to appropriate handler
 
     Args:
         history: Conversation history
@@ -238,11 +219,41 @@ def bot_route_answer_message(history, question, system_prompt=None):
     Returns:
         str: Generated response
     """
-    # detect the route
+    # ============================================
+    # STEP 0: INPUT VALIDATION (Qwen3Guard) - BEFORE ROUTING
+    # ============================================
+    guardrails = get_guardrails_service()
+    is_valid_input, violation_category, input_metadata = guardrails.validate_query(
+        question
+    )
+
+    rag_log.log_guardrails_input(
+        is_valid=is_valid_input,
+        category=violation_category,
+        severity=input_metadata.get("severity") if input_metadata else None,
+    )
+
+    if not is_valid_input:
+        rejection_message = guardrails.get_rejection_message(
+            violation_category, language="vi"
+        )
+        logger.warning(
+            f"[GUARD] ⛔ Input rejected: category={violation_category}, "
+            f"severity={input_metadata.get('severity') if input_metadata else 'unknown'}"
+        )
+        return rejection_message
+
+    # ============================================
+    # STEP 1: ROUTE DETECTION
+    # ============================================
     route = detect_route(history, question)
-    logger.info(f"Bot route: {route}")
+    rag_log.log_route_detection(route)
+
     if route == "medical":
-        return rag_qa_task(history, question, system_prompt=system_prompt)
+        # Pass skip_input_validation=True since we already validated
+        return rag_qa_task(
+            history, question, system_prompt=system_prompt, skip_input_validation=True
+        )
     elif route == "general":
         response = qwen3_chat_complete(
             messages=[
@@ -255,10 +266,8 @@ def bot_route_answer_message(history, question, system_prompt=None):
             + history
             + [{"role": "user", "content": question}],
             temperature=0.7,
-            max_tokens=1024,
-            use_fallback=True,  # Enable fallback to prevent None return
+            max_tokens=1536,
         )
-        # Fallback to safe message if still None
         if response is None:
             return "Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau."
         return response
@@ -270,12 +279,14 @@ def bot_route_answer_message(history, question, system_prompt=None):
     soft_time_limit=180,  # 3 minutes soft timeout
     max_retries=0,  # No automatic retries
 )
-def rag_qa_task(self, history, question, system_prompt=None):
+def rag_qa_task(
+    self, history, question, system_prompt=None, skip_input_validation=False
+):
     """
     RAG QA task with Qwen3Guard input/output validation.
 
     Flow:
-    1. Validate user input with Qwen3Guard
+    1. Validate user input with Qwen3Guard (if not already validated)
     2. If valid, proceed with RAG pipeline
     3. Generate response with Qwen3
     4. Validate response with Qwen3Guard
@@ -283,72 +294,72 @@ def rag_qa_task(self, history, question, system_prompt=None):
     6. Return final validated response
 
     Args:
-        self: Celery task instance (for cancellation check)
         history: Conversation history
         question: User question
-        system_prompt: Custom system prompt (optional, uses settings.system_prompt if None)
+        system_prompt: Custom system prompt (optional)
+        skip_input_validation: Skip input validation if already done in bot_route_answer_message
     """
+    import time
+    from .core.model_config import get_generation_model
+
+    request_start = time.time()
+
     try:
+        guardrails = get_guardrails_service()
+
         # ============================================
         # STEP 1: INPUT VALIDATION (Qwen3Guard)
+        # Skip if already validated in bot_route_answer_message
         # ============================================
-        logger.info("=" * 60)
-        logger.info("🛡️  STEP 1: Input Validation with Qwen3Guard")
-        logger.info("=" * 60)
-
-        guardrails = get_guardrails_service()
-        is_valid_input, violation_category, input_metadata = guardrails.validate_query(
-            question
-        )
-
-        if not is_valid_input:
-            rejection_message = guardrails.get_rejection_message(
-                violation_category, language="vi"
+        if not skip_input_validation:
+            is_valid_input, violation_category, input_metadata = (
+                guardrails.validate_query(question)
             )
-            logger.warning(
-                f"❌ User query REJECTED by guardrails: category={violation_category}, "
-                f"metadata={input_metadata}"
+
+            rag_log.log_guardrails_input(
+                is_valid=is_valid_input,
+                category=violation_category,
+                severity=input_metadata.get("severity") if input_metadata else None,
             )
-            logger.info(f"📤 Returning rejection message: {rejection_message}")
-            return rejection_message
 
-        logger.info(
-            f"✅ User query PASSED input validation (confidence={input_metadata.get('confidence', 'N/A')})"
-        )
+            if not is_valid_input:
+                rejection_message = guardrails.get_rejection_message(
+                    violation_category, language="vi"
+                )
+                rag_log.log_request_complete(request_start, success=False)
+                return rejection_message
 
         # ============================================
-        # STEP 2: RAG PIPELINE (Query Enhancement + Retrieval + Reranking)
+        # STEP 2: QUERY ENHANCEMENT
         # ============================================
-        logger.info("=" * 60)
-        logger.info("🔍 STEP 2: RAG Pipeline Processing")
-        logger.info("=" * 60)
-
         new_question = enhance_query_quality(history, question)
-        logger.info(f"📝 Enhanced query: {new_question[:100]}...")
+        rag_log.log_query_enhancement(question, new_question)
 
-        # Get embedding service (Qwen3)
+        # ============================================
+        # STEP 3: EMBEDDING GENERATION
+        # ============================================
         embedding_service = get_embedding_service()
-
-        # Generate embedding for question using Qwen3 (WITH instruction prefix)
-        logger.info(
-            "🔢 Generating embedding with Qwen3-Embedding (instruction-aware)..."
-        )
         question_embedding = embedding_service.embed_query(new_question, use_cache=True)
 
         if not question_embedding:
-            logger.error("❌ Failed to generate embedding for question")
+            rag_log.log_embedding(success=False, is_query=True)
+            rag_log.log_request_complete(request_start, success=False)
             return "Xin lỗi, không thể xử lý câu hỏi của bạn lúc này."
 
-        # Retrieve top-k most relevant documents using HYBRID SEARCH (vector + keyword)
-        logger.info(
-            f"🔎 Performing hybrid search (vector + keyword, top_k={settings.top_k})..."
+        rag_log.log_embedding(
+            success=True,
+            dimension=len(question_embedding),
+            is_query=True,
+            cache_hit=False,  # Cache status logged in embedding service
         )
 
+        # ============================================
+        # STEP 4: HYBRID RETRIEVAL
+        # ============================================
         from .core.hybrid_search import hybrid_search
         from .services.elasticsearch import get_elasticsearch_client
         from .core.vectorize import search_vectors_for_hybrid
 
-        # Define search functions
         def vector_search_fn(query, top_k, doc_type_filter=None, source_filter=None):
             return search_vectors_for_hybrid(
                 query_vector=question_embedding,
@@ -367,42 +378,39 @@ def rag_qa_task(self, history, question, system_prompt=None):
                 source_filter=source_filter,
             )
 
-        # Perform hybrid search (RRF fusion)
         relevant_docs = hybrid_search(
             query=new_question,
             vector_search_fn=vector_search_fn,
             keyword_search_fn=keyword_search_fn,
             top_k=settings.top_k,
-            rrf_k=60,  # RRF parameter
+            rrf_k=60,
             use_cache=True,
         )
-        logger.info(
-            f"📚 Hybrid search retrieved {len(relevant_docs)} documents (RRF fusion)"
-        )
 
-        # Rerank using Qwen3 Reranker
-        logger.info("⚡ Reranking with Qwen3-Reranker...")
+        # ============================================
+        # STEP 5: RERANKING
+        # ============================================
         reranker = get_qwen3_reranker()
         if relevant_docs:
             reranked_results, rerank_context = reranker.rerank(
                 new_question, relevant_docs, top_n=5
             )
             if reranked_results:
-                logger.info(
-                    f"📊 Reranking complete: top score={reranked_results[0]['relevance_score']:.3f}"
-                )
+                rag_log.log_rerank_results(reranked_results, top_n=5)
         else:
             reranked_results, rerank_context = None, None
-            logger.warning("⚠️  No documents retrieved from vector DB")
+            logger.warning("[RAG] ⚠️ No documents retrieved")
 
-        # Check if RAG results have sufficient confidence. If best score is too low, use web search
+        # Check confidence for web search fallback
         use_web_search = False
         if not reranked_results or (
             reranked_results and reranked_results[0]["relevance_score"] < 0.5
         ):
+            best_score = (
+                reranked_results[0]["relevance_score"] if reranked_results else 0
+            )
             logger.info(
-                f"⚠️  RAG confidence low (best score: {reranked_results[0]['relevance_score'] if reranked_results else 0:.3f}), "
-                f"will use web search as fallback"
+                f"[RAG] 🌐 Low confidence (score={best_score:.3f}), using web search"
             )
             use_web_search = True
 
@@ -413,45 +421,52 @@ def rag_qa_task(self, history, question, system_prompt=None):
         )
 
         # ============================================
-        # STEP 3: RESPONSE GENERATION (Qwen3 + Validation Loop)
+        # STEP 6: HISTORY SUMMARIZATION
         # ============================================
-        logger.info("=" * 60)
-        logger.info("🤖 STEP 3: Response Generation with Output Validation")
-        logger.info("=" * 60)
+        from .services.summarizer import (
+            summarize_old_messages,
+            calculate_messages_tokens,
+        )
 
-        # Build the message chain with intelligent history management
-        from .services.summarizer import summarize_old_messages
-
-        # Use custom system_prompt if provided, otherwise use default from settings
         prompt = system_prompt or settings.system_prompt
         messages = [{"role": "system", "content": prompt}]
-
         history_with_system = messages + history
+
+        original_count = len(history_with_system)
+        original_tokens = calculate_messages_tokens(history_with_system)
+
         optimized_history = summarize_old_messages(
             history_with_system, target_tokens=2000
         )
+
+        new_tokens = calculate_messages_tokens(optimized_history)
+        rag_log.log_history_summary(
+            original_count=original_count,
+            summarized_count=len(optimized_history),
+            original_tokens=original_tokens,
+            new_tokens=new_tokens,
+        )
+
         messages = optimized_history
 
-        max_retries = 0  # DISABLED: No retry for output validation (testing mode)
+        # ============================================
+        # STEP 7: RESPONSE GENERATION WITH VALIDATION
+        # ============================================
+        max_retries = 0  # Disabled for testing
         retry_count = 0
         final_response = None
+        generation_model = get_generation_model()
 
         while retry_count <= max_retries:
-            # Check if task was revoked (cancelled by user)
             if self.request.id and self.AsyncResult(self.request.id).state == "REVOKED":
-                logger.warning("❌ Task was cancelled by user, aborting...")
+                logger.warning("[RAG] Task cancelled by user")
                 return "Yêu cầu đã bị hủy bởi người dùng."
 
-            logger.info(f"🔄 Generation attempt {retry_count + 1}/{max_retries + 1}")
-
             if use_web_search:
-                # Use web search with Tavily agent
                 user_message = {
                     "role": "user",
                     "content": f"RAG Context (can be insufficient):\n{formatted_context}\n\nQuestion: {new_question}\n\nNote: Information in RAG context may be insufficient. Please search for additional information from the internet and ALWAYS provide the source with the full URL.",
                 }
-
-                # Add retry feedback if this is a retry
                 if retry_count > 0 and "feedback" in locals():
                     user_message[
                         "content"
@@ -459,103 +474,79 @@ def rag_qa_task(self, history, question, system_prompt=None):
 
                 messages_with_query = messages + [user_message]
                 response = get_tavily_agent_answer(messages_with_query)
-                logger.info("🌐 Response generated with web search fallback")
             else:
-                # Use standard RAG response with Qwen3
                 user_message = {
                     "role": "user",
                     "content": settings.rag_prompt.format(
                         context=formatted_context, question=new_question
                     ),
                 }
-
-                # Add retry feedback if this is a retry
                 if retry_count > 0 and "feedback" in locals():
                     user_message[
                         "content"
                     ] += f"\n\n⚠️ IMPORTANT FEEDBACK FROM SAFETY CHECK:\n{feedback}\n\nPlease revise your response accordingly."
 
                 messages_with_query = messages + [user_message]
-
-                # Use Qwen3 generation model with reasonable max_tokens
-                # Medical responses typically 500-800 tokens, 1024 is sufficient
                 response = qwen3_chat_complete(
                     messages=messages_with_query,
                     temperature=0.7,
-                    max_tokens=1024,  # Reduced from 2048 to prevent timeouts
-                    use_fallback=True,
+                    max_tokens=1536,
                 )
 
                 if not response:
-                    logger.error("❌ Failed to generate response with Qwen3")
+                    rag_log.log_generation(success=False, use_web_search=use_web_search)
+                    rag_log.log_request_complete(request_start, success=False)
                     return "Xin lỗi, không thể tạo câu trả lời lúc này."
 
-                logger.info(
-                    f"✅ RAG response generated successfully with Qwen3 ({len(response)} chars)"
-                )
+            rag_log.log_generation(
+                success=True,
+                response_length=len(response) if response else 0,
+                model=generation_model,
+                use_web_search=use_web_search,
+            )
 
-            # ============================================
-            # STEP 4: OUTPUT VALIDATION (Qwen3Guard)
-            # ============================================
-            logger.info("-" * 60)
-            logger.info(f"🛡️  STEP 4: Output Validation (Attempt {retry_count + 1})")
-            logger.info("-" * 60)
-
+            # Output validation
             is_valid_output, output_violation, output_metadata = (
                 guardrails.validate_response(
                     response, question, max_retries=max_retries
                 )
             )
 
-            if is_valid_output:
-                logger.info(
-                    f"✅ Response PASSED output validation (confidence={output_metadata.get('confidence', 'N/A')})"
-                )
-                final_response = response
-                break  # Success! Exit retry loop
-            else:
-                logger.warning(
-                    f"❌ Response FAILED output validation: category={output_violation}, "
-                    f"attempt={retry_count + 1}/{max_retries + 1}"
-                )
+            rag_log.log_guardrails_output(
+                is_valid=is_valid_output,
+                category=output_violation,
+                severity=output_metadata.get("severity") if output_metadata else None,
+                attempt=retry_count + 1,
+            )
 
+            if is_valid_output:
+                final_response = response
+                break
+            else:
                 if retry_count < max_retries:
-                    # Get feedback for regeneration
                     feedback = output_metadata.get(
                         "feedback",
                         "Please revise your response to be safer and more appropriate.",
                     )
-                    logger.info(f"📝 Regeneration feedback: {feedback}")
-                    logger.info(f"🔄 Retrying generation with feedback...")
                     retry_count += 1
                 else:
-                    # Max retries exceeded - return safe fallback
-                    logger.error(
-                        f"❌ Max retries ({max_retries}) exceeded. Returning safe fallback response."
-                    )
                     final_response = (
                         "Xin lỗi, tôi không thể tạo ra câu trả lời phù hợp cho câu hỏi này. "
                         "Vui lòng thử lại với cách diễn đạt khác hoặc liên hệ với bác sĩ để được tư vấn trực tiếp."
                     )
                     break
 
-        # ============================================
-        # STEP 5: RETURN FINAL RESPONSE
-        # ============================================
-        logger.info("=" * 60)
-        logger.info("📤 STEP 5: Returning Final Response")
-        logger.info("=" * 60)
-        logger.info(f"✅ Final response: {final_response[:150]}...")
-        logger.info(f"📊 Total generation attempts: {retry_count + 1}")
-
+        rag_log.log_request_complete(request_start, success=True)
         return final_response
 
     except SoftTimeLimitExceeded:
-        logger.error("❌ Task exceeded soft time limit (240s), aborting...")
+        logger.error("[RAG] Task exceeded soft time limit (180s)")
+        rag_log.log_request_complete(request_start, success=False)
         return "Xin lỗi, yêu cầu của bạn đã vượt quá thời gian xử lý cho phép. Vui lòng thử lại với câu hỏi ngắn gọn hơn."
 
     except Exception as e:
-        logger.error(f"❌ Error in RAG QA task: {e}", exc_info=True)
+        logger.error(f"[RAG] Error: {e}", exc_info=True)
+        rag_log.log_request_complete(request_start, success=False)
         return "Xin lỗi, đã có lỗi xảy ra trong quá trình xử lý câu hỏi."
 
 
@@ -603,10 +594,6 @@ def ingest_dataset_task(
     chunks_indexed = 0
 
     try:
-        logger.info(
-            f"Starting dataset ingestion: {dataset_name} (split={split}, batch_size={batch_size})"
-        )
-
         # Update state to running
         self.update_state(
             state="PROGRESS",
@@ -618,13 +605,14 @@ def ingest_dataset_task(
         )
 
         # Load dataset from HuggingFace
-        logger.info(f"Loading dataset from HuggingFace Hub: {dataset_name}")
         dataset = load_dataset(dataset_name, dataset_config, split=split)
 
         total_docs = (
             len(dataset) if max_documents is None else min(len(dataset), max_documents)
         )
-        logger.info(f"Dataset loaded: {total_docs} documents to process")
+        logger.info(
+            f"[INDEX] 📂 Dataset loaded: {dataset_name} | {total_docs} documents | batch_size={batch_size}"
+        )
 
         # OPTIMIZATION 1: Process documents in batches
         document_batch = []
@@ -633,9 +621,6 @@ def ingest_dataset_task(
             for idx, item in enumerate(dataset):
                 # CRITICAL FIX: Check max_documents against PROCESSED count, not dataset index
                 if max_documents and documents_indexed >= max_documents:
-                    logger.info(
-                        f"✅ Reached max_documents limit ({max_documents}), stopping ingestion"
-                    )
                     break
 
                 # Extract document fields (adapt to dataset structure)
@@ -646,7 +631,6 @@ def ingest_dataset_task(
                 )
 
                 if not content:
-                    logger.warning(f"Skipping document {idx}: no content found")
                     continue
 
                 # Calculate content hash for incremental updates (T102a)
@@ -660,9 +644,6 @@ def ingest_dataset_task(
                 )
 
                 if existing_doc:
-                    logger.info(
-                        f"Document {idx} already indexed (hash match), skipping"
-                    )
                     continue
 
                 # Create document metadata with version tracking (T102b)
@@ -694,10 +675,6 @@ def ingest_dataset_task(
 
                 # OPTIMIZATION 2: Process batch when full or at end
                 if len(document_batch) >= batch_size or idx == len(dataset) - 1:
-                    logger.info(
-                        f"Processing batch of {len(document_batch)} documents..."
-                    )
-
                     # Create documents in database (batch commit)
                     new_docs = []
                     for doc_data in document_batch:
@@ -716,13 +693,8 @@ def ingest_dataset_task(
                     for new_doc, _ in new_docs:
                         db.refresh(new_doc)
 
-                    logger.info(f"✅ Committed {len(new_docs)} documents to database")
-
                     # Chunk and index each document (embedding is already batched inside)
                     for new_doc, doc_data in new_docs:
-                        logger.info(
-                            f"Chunking and indexing document {doc_data['idx']+1}/{total_docs}: {doc_data['title'][:50]}"
-                        )
                         chunk_result = chunk_and_index_document(
                             str(new_doc.id),
                             doc_data["title"],
@@ -752,9 +724,9 @@ def ingest_dataset_task(
                         },
                     )
 
+                    # Log batch progress
                     logger.info(
-                        f"Progress: {documents_indexed}/{total_docs} documents, "
-                        f"{chunks_indexed} chunks created"
+                        f"[INDEX] 📊 Progress: {documents_indexed}/{total_docs} docs | {chunks_indexed} chunks"
                     )
 
                     # Clear batch
@@ -763,8 +735,7 @@ def ingest_dataset_task(
         duration = time.time() - start_time
 
         logger.info(
-            f"✅ Dataset ingestion completed: {documents_indexed} documents, "
-            f"{chunks_indexed} chunks in {duration:.2f}s"
+            f"[INDEX] ✅ Completed: {documents_indexed} docs | {chunks_indexed} chunks | {duration:.2f}s"
         )
 
         return {
@@ -774,7 +745,7 @@ def ingest_dataset_task(
         }
 
     except Exception as e:
-        logger.error(f"❌ Dataset ingestion failed: {e}", exc_info=True)
+        logger.error(f"[INDEX] ❌ Ingestion failed: {e}")
         raise
 
 
@@ -807,8 +778,6 @@ def reindex_document_task(self, document_id: str):
     try:
         doc_uuid = UUID(document_id)
 
-        logger.info(f"Starting document reindexing: {document_id}")
-
         with SessionLocal() as db:
             # Get document
             doc = db.query(Document).filter(Document.id == doc_uuid).first()
@@ -820,8 +789,6 @@ def reindex_document_task(self, document_id: str):
             existing_chunks = db.query(Chunk).filter(Chunk.documentId == doc_uuid).all()
             chunk_ids = [str(chunk.id) for chunk in existing_chunks]
 
-            logger.info(f"Found {len(chunk_ids)} existing chunks to delete")
-
             # Delete from Qdrant
             if chunk_ids:
                 try:
@@ -829,9 +796,8 @@ def reindex_document_task(self, document_id: str):
                         collection_name=vectorize_settings.qdrant_collection_name,
                         points_selector=chunk_ids,
                     )
-                    logger.info(f"Deleted {len(chunk_ids)} chunks from Qdrant")
                 except Exception as e:
-                    logger.warning(f"Failed to delete from Qdrant: {e}")
+                    logger.warning(f"[REINDEX] Failed to delete from Qdrant: {e}")
 
             # Delete from Elasticsearch
             if chunk_ids:
@@ -843,18 +809,17 @@ def reindex_document_task(self, document_id: str):
                                 id=chunk_id,
                                 ignore=[404],
                             )
-                        except Exception as e:
-                            logger.warning(f"Failed to delete chunk {chunk_id}: {e}")
-                    logger.info(f"Deleted {len(chunk_ids)} chunks from Elasticsearch")
+                        except Exception:
+                            pass
                 except Exception as e:
-                    logger.warning(f"Failed to delete from Elasticsearch: {e}")
+                    logger.warning(
+                        f"[REINDEX] Failed to delete from Elasticsearch: {e}"
+                    )
 
             # Delete chunks from database
             for chunk in existing_chunks:
                 db.delete(chunk)
             db.commit()
-
-            logger.info("Deleted existing chunks from database")
 
             # Re-chunk and re-index with document metadata
             doc_metadata = doc.metadata_ or {}
@@ -872,18 +837,18 @@ def reindex_document_task(self, document_id: str):
             db.commit()
 
         duration = time.time() - start_time
+        chunks_created = chunk_result.get("chunks_created", 0)
 
         logger.info(
-            f"✅ Document reindexing completed: {document_id}, "
-            f"{chunk_result.get('chunks_created', 0)} chunks in {duration:.2f}s"
+            f"[REINDEX] ✅ doc_id={document_id[:8]}... | {len(chunk_ids)} deleted → {chunks_created} created | {duration:.2f}s"
         )
 
         return {
             "document_id": document_id,
-            "chunks_created": chunk_result.get("chunks_created", 0),
+            "chunks_created": chunks_created,
             "duration_seconds": duration,
         }
 
     except Exception as e:
-        logger.error(f"❌ Document reindexing failed: {e}", exc_info=True)
+        logger.error(f"[REINDEX] ❌ Failed: {e}")
         raise
