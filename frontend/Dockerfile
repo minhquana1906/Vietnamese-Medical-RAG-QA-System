@@ -26,6 +26,11 @@ WORKDIR /app/frontend
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Environment variables for Chainlit
+ENV CHAINLIT_HOST=0.0.0.0
+ENV CHAINLIT_PORT=8501
+
 USER app
 
-CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run Chainlit app
+CMD ["chainlit", "run", "main.py", "--host", "0.0.0.0", "--port", "8501", "-w"]

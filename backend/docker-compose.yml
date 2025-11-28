@@ -9,19 +9,55 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
-      - medical_rag_qa_network
+      - medical_rag_network
 
-  valkey_db:
-    image: valkey/valkey:bookworm
-    container_name: valkey_db
+  redis_db:
+    image: redis:7.2-bookworm
+    container_name: redis_db
     restart: always
     ports:
       - "6379:6379"
-    command: ["redis-server", "--save", "180", "1", "--loglevel", "warning"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redisadmin}
+    command:
+      [
+        "sh",
+        "-c",
+        "redis-server --requirepass $${REDIS_PASSWORD} --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru",
+      ]
     volumes:
-      - valkey_data:/data
+      - redis_data:/data
     networks:
-      - medical_rag_qa_network
+      - medical_rag_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redisadmin}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    restart: always
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=medical-rag-cluster
+      - node.name=elasticsearch-node
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - medical_rag_network
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   chatbot_api:
     build:
@@ -35,13 +71,17 @@ services:
     env_file:
       - .env
     depends_on:
-      - qdrant_db
-      - valkey_db
+      qdrant_db:
+        condition: service_started
+      redis_db:
+        condition: service_healthy
     volumes:
       - nltk_data:/app/nltk_data
       - .:/app/backend
+      - huggingface_cache:/root/.cache/huggingface # Mount HF models cache
+      - audio_data:/tmp/audio # Shared audio files
     networks:
-      - medical_rag_qa_network
+      - medical_rag_network
 
   chatbot_worker:
     build:
@@ -52,23 +92,32 @@ services:
     env_file:
       - .env
     depends_on:
-      - valkey_db
-      - chatbot_api
+      redis_db:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      chatbot_api:
+        condition: service_started
     user: root
-    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R 1000:1000 /app/logs/worker && su app -c 'celery -A src.tasks.celery_app worker --loglevel=debug --logfile /app/logs/worker/worker.log'"
+    command: /bin/bash -c "mkdir -p /app/logs/worker && chown -R 1000:1000 /app/logs/worker && su app -c 'celery -A src.tasks.celery_app worker --loglevel=info'"
     volumes:
       - .:/app/backend
       - worker_volume:/app/logs/worker
       - nltk_data:/app/nltk_data
+      - huggingface_cache:/root/.cache/huggingface # Mount HF models cache
+      - audio_data:/tmp/audio # Shared audio files
     networks:
-      - medical_rag_qa_network
+      - medical_rag_network
 
 networks:
-  medical_rag_qa_network:
+  medical_rag_network:
     external: true
 
 volumes:
   qdrant_data:
-  valkey_data:
+  redis_data:
+  elasticsearch_data:
   worker_volume:
   nltk_data:
+  huggingface_cache:
+  audio_data: # Shared volume for audio files

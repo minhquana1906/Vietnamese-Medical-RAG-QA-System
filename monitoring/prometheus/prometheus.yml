@@ -1,0 +1,63 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'medical-rag-cluster'
+    environment: 'development'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # FastAPI backend
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['chatbot_api:8000']
+    metrics_path: '/metrics/'
+    scrape_interval: 10s
+
+  # vLLM model serving (remote server with Bearer token)
+  - job_name: 'vllm'
+    static_configs:
+      - targets: ['171.248.40.12:44624']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    authorization:
+      type: Bearer
+      credentials: 5ea73a8fef8b4e4f0ab4074b6812e2cbc415073a24302fe5b729e93932f17310
+
+  # GPU service (Qwen3 models + Whisper-turbo)
+  - job_name: 'gpu_service'
+    static_configs:
+      - targets: ['extra_models:8002']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Redis exporter (optional - requires redis_exporter sidecar)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis_exporter:9121']
+
+  # Elasticsearch exporter (optional - requires elasticsearch_exporter)
+  # - job_name: 'elasticsearch'
+  #   static_configs:
+  #     - targets: ['elasticsearch_exporter:9114']
+
+  # Node exporter (optional - for system metrics)
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node_exporter:9100']

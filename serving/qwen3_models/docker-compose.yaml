@@ -1,0 +1,95 @@
+services:
+  extra_models:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: extra_models
+    environment:
+      # Model serving config
+      - BACKEND_API_URL=http://extra_models:8002
+      - ENABLE_GPU=true
+      - CUDA_VISIBLE_DEVICES=0
+
+      # Model paths (auto-download from HuggingFace)
+      - EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
+      - RERANKER_MODEL=Qwen/Qwen3-Reranker-0.6B
+      - GUARDRAILS_MODEL=Qwen/Qwen3Guard-Gen-0.6B
+
+      # STT Configuration
+      - STT_MODEL=turbo
+      - STT_DEVICE=cuda
+
+      # # Performance tuning
+      - TORCH_NUM_THREADS=4
+      - OMP_NUM_THREADS=4
+
+      # Redis cache (shared with main backend)
+      - REDIS_HOST=redis_db
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redisadmin}
+
+    ports:
+      - "8002:8002"
+
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - ./app.py:/app/app.py
+      - audio_data:/tmp/audio # Shared audio files
+
+    networks:
+      - medical_rag_network
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 11G
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s # Give time for model loading
+
+  # faster_whisper:
+  #   image: linuxserver/faster-whisper:3.0.2-gpu
+  #   container_name: faster_whisper
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - TZ=Asia/Bangkok
+  #     - WHISPER_MODEL=turbo
+  #     # - LOCAL_ONLY= #optional
+  #     - WHISPER_BEAM=5 #optional
+  #     - WHISPER_LANG=vi #optional
+  #   volumes:
+  #     - faster_whisper_data:/config
+  #   ports:
+  #     - 10300:10300
+  #   restart: unless-stopped
+  #   # Add deploy settings for GPU if needed
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+
+networks:
+  medical_rag_network:
+    external: true
+
+volumes:
+  huggingface_cache:
+    external: true
+  audio_data:
+    external: true
+  faster_whisper_data:

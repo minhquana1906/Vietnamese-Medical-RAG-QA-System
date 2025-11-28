@@ -211,3 +211,60 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# Project-specific ignores
+# Models (large binary files)
+
+models/*.pth
+models/*.bin
+models/*.safetensors
+models/*.gguf
+
+# Data
+data/
+datasets/
+*.csv
+*.jsonl
+*.parquet
+
+# Monitoring data
+monitoring/prometheus/data/
+monitoring/loki/data/
+monitoring/tempo/data/
+monitoring/grafana/data/
+
+# Docker volumes
+*_data/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Chainlit
+.chainlit/
+.files/
+
+data/
+docs/
+
+.github/prompts
+.github/copilot-instructions.md
+.specify
+.vscode
+specs/
+
+data/vietnamese_medical_corpus/

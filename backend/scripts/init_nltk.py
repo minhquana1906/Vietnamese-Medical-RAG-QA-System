@@ -12,7 +12,7 @@ def download_nltk_data():
     if not punkt_path.exists():
         logger.info("Downloading NLTK punkt_tab...")
         nltk.download("punkt_tab", download_dir=nltk_data_dir, quiet=True)
-        logger.info("NLTK punkt_tab downloaded successfully")
+        logger.success("NLTK punkt_tab downloaded successfully")
     else:
         logger.info("NLTK punkt_tab already exists")
 

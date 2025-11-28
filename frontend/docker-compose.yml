@@ -1,9 +1,9 @@
 services:
-  chatbot_ui:
+  chainlit_frontend:
     build:
       context: ..
       dockerfile: frontend/Dockerfile
-    container_name: chatbot_ui
+    container_name: chainlit_frontend
     restart: always
     ports:
       - "8501:8501"
@@ -11,9 +11,22 @@ services:
       - 8501
     volumes:
       - .:/app/frontend
+      - ./.chainlit:/app/frontend/.chainlit
+      - ./public:/app/frontend/public
+    env_file:
+      - .env
+    environment:
+      - BACKEND_URL=${BACKEND_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID}
+      - OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET}
+      - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID}
+      - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET}
+      - CHAINLIT_HOST=0.0.0.0
+      - CHAINLIT_PORT=8501
     networks:
-      - medical_rag_qa_network
+      - medical_rag_network
 
 networks:
-  medical_rag_qa_network:
+  medical_rag_network:
     external: true
