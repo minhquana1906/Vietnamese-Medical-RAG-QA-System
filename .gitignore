@@ -261,12 +261,10 @@ Thumbs.db
 data/
 docs/
 
-# .github/prompts
-# .github/copilot-instructions.md
-# .specify
-# .vscode
-# specs/
+.github/prompts
+.github/copilot-instructions.md
+.specify
+.vscode
+specs/
 
-note.txt
 data/vietnamese_medical_corpus/
-test.ipynb
