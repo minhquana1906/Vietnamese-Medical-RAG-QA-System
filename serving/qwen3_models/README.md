@@ -5,7 +5,7 @@ Serve 4 models (Embedding, Reranker, Guardrails, STT) trên GPU để tối ưu 
 ## Features
 
 - **Qwen3-Embedding-0.6B** (FP16) - Semantic embeddings
-- **Qwen3-Reranker-0.6B** (FP16) - Document reranking  
+- **Qwen3-Reranker-0.6B** (FP16) - Document reranking
 - **Qwen3Guard-Gen-0.6B** (FP16) - Content safety guardrails
 - **Whisper-turbo** (large-v3-turbo, FP16) - Speech-to-text with batch inference (batch_size=16)
 

@@ -42,13 +42,8 @@ from langchain_openai import ChatOpenAI
 from loguru import logger
 from ragas import EvaluationDataset, evaluate
 from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import (
-    AnswerRelevancy,
-    ContextPrecision,
-    FactualCorrectness,
-    Faithfulness,
-    LLMContextRecall,
-)
+from ragas.metrics import (AnswerRelevancy, ContextPrecision,
+                           FactualCorrectness, Faithfulness, LLMContextRecall)
 
 # Import RAG pipeline components
 from backend.src.configs.setup import get_backend_settings
@@ -58,13 +53,9 @@ from backend.src.services.brain import qwen3_chat_complete
 from backend.src.services.elasticsearch import get_elasticsearch_client
 from backend.src.services.embedding import get_embedding_service
 from backend.src.services.rerank import get_qwen3_reranker
-
 # Import utilities
-from scripts.eval_utils import (
-    compute_performance_metrics,
-    compute_retrieval_metrics,
-    format_eval_report,
-)
+from scripts.eval_utils import (compute_performance_metrics,
+                                compute_retrieval_metrics, format_eval_report)
 
 settings = get_backend_settings()
 

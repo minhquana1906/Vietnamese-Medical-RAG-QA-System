@@ -1,20 +1,16 @@
+import io
 import os
 import time
 import uuid
 import wave
-import io
 from pathlib import Path
-import numpy as np
 
 import chainlit as cl
 import httpx
+import numpy as np
 from loguru import logger
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_exponential)
 
 # Backend API configuration
 BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://chatbot_api:8000")

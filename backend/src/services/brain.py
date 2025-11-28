@@ -7,11 +7,8 @@ from loguru import logger
 from openai import OpenAI
 
 from ..configs.setup import get_backend_settings
-from ..core.model_config import (
-    get_generation_model,
-    get_vllm_url,
-    get_vllm_api_key,
-)
+from ..core.model_config import (get_generation_model, get_vllm_api_key,
+                                 get_vllm_url)
 
 settings = get_backend_settings()
 

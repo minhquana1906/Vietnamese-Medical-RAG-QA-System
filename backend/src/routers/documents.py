@@ -7,28 +7,20 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
-from ..database import SessionLocal
-from ..models import Document, Chunk, init_db, insert_document
-from ..schemas.schema import (
-    IngestDatasetRequest,
-    IngestDatasetResponse,
-    IndexingJobStatusResponse,
-    DocumentCreate,
-    DocumentResponse,
-    DocumentDetailResponse,
-    DocumentListResponse,
-    ReindexDocumentResponse,
-)
-from ..tasks import chunk_and_index_document
 from ..core.cache import invalidate_search_cache
+from ..database import SessionLocal
+from ..models import Chunk, Document, init_db, insert_document
+from ..schemas.schema import (DocumentCreate, DocumentDetailResponse,
+                              DocumentListResponse, DocumentResponse,
+                              IndexingJobStatusResponse, IngestDatasetRequest,
+                              IngestDatasetResponse, ReindexDocumentResponse)
+from ..tasks import chunk_and_index_document
 
 router = APIRouter(prefix="/v1", tags=["Documents & Indexing"])
 
 # Metrics (imported from main.py)
-from ..core.metrics import (
-    document_indexing_total,
-    document_indexing_duration_seconds,
-)
+from ..core.metrics import (document_indexing_duration_seconds,
+                            document_indexing_total)
 
 
 @router.post("/indexing/ingest-dataset", response_model=IngestDatasetResponse)

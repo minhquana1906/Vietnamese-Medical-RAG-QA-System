@@ -1,6 +1,11 @@
 {
   "title": "RAG System - Model Performance",
-  "tags": ["models", "rag", "voice", "monitoring"],
+  "tags": [
+    "models",
+    "rag",
+    "voice",
+    "monitoring"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "uid": "model-monitoring",
@@ -22,7 +27,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -44,7 +54,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps"
@@ -66,7 +81,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes"
@@ -88,7 +108,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps"
@@ -110,7 +135,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -132,7 +162,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps"
@@ -153,7 +188,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      }
     }
   ],
   "time": {

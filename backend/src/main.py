@@ -1,22 +1,22 @@
+import time
+
 from fastapi import FastAPI, Request, Response
 from loguru import logger
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+    OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from prometheus_client import make_asgi_app
-import time
 
 from .configs.setup import get_backend_settings
-from .core.vectorize import create_collection
-from .models import init_db
-
 # Import metrics first (before routers to avoid circular import)
 from .core import metrics  # noqa: F401
-
+from .core.vectorize import create_collection
+from .models import init_db
 # Import routers
-from .routers import health, rag, models, audio, documents
+from .routers import audio, documents, health, models, rag
 
 settings = get_backend_settings()
 
@@ -58,15 +58,13 @@ fastapi_app_info.labels(app_name=settings.app_name, version=settings.app_version
 @app.middleware("http")
 async def prometheus_middleware(request: Request, call_next):
     """Custom middleware to track FastAPI metrics"""
-    from .core.metrics import (
-        fastapi_requests_total,
-        fastapi_responses_total,
-        fastapi_requests_duration_seconds,
-        fastapi_requests_in_progress,
-        fastapi_exceptions_total,
-        fastapi_request_size_bytes,
-        fastapi_response_size_bytes,
-    )
+    from .core.metrics import (fastapi_exceptions_total,
+                               fastapi_request_size_bytes,
+                               fastapi_requests_duration_seconds,
+                               fastapi_requests_in_progress,
+                               fastapi_requests_total,
+                               fastapi_response_size_bytes,
+                               fastapi_responses_total)
 
     method = request.method
     path = request.url.path
@@ -164,8 +162,8 @@ def on_startup():
 
         # Initialize STT service
         try:
-            from .services.stt_service import initialize_stt_service
             from .core.model_config import load_model_config
+            from .services.stt_service import initialize_stt_service
 
             config = load_model_config()
             stt_config = config.get("models", {}).get("stt", {})
@@ -182,8 +180,9 @@ def on_startup():
                 f"⚠️  Failed to initialize STT service: {e}"
             )  # Initialize TTS service
         try:
-            from .services.tts_service import initialize_tts_service
             import os
+
+            from .services.tts_service import initialize_tts_service
 
             api_key = os.getenv("ELEVENLABS_API_KEY")
             voice_id = os.getenv("ELEVENLABS_VOICE_ID")
@@ -197,7 +196,7 @@ def on_startup():
             logger.warning(f"⚠️  Failed to initialize TTS service: {e}")
 
         try:
-            from .services.brain import qwen3_chat_complete, check_vllm_health
+            from .services.brain import check_vllm_health, qwen3_chat_complete
 
             logger.info("🔥 Warming up generation model (vLLM)...")
 

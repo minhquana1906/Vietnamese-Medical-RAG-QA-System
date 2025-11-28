@@ -7,17 +7,11 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
-from ..schemas.schema import (
-    EmbedRequest,
-    EmbedResponse,
-    RerankRequest,
-    RerankResponse,
-    GuardRequest,
-    GuardResponse,
-)
+from ..core.guardrails import Qwen3GuardService
+from ..schemas.schema import (EmbedRequest, EmbedResponse, GuardRequest,
+                              GuardResponse, RerankRequest, RerankResponse)
 from ..services.embedding import Qwen3EmbeddingService
 from ..services.rerank import Qwen3RerankerService
-from ..core.guardrails import Qwen3GuardService
 
 router = APIRouter(prefix="/v1/models", tags=["Model Inference"])
 

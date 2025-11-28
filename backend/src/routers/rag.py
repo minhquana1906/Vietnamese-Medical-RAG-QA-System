@@ -5,10 +5,10 @@ from loguru import logger
 from opentelemetry import trace
 from sqlalchemy.orm import Session
 
+from ..core.metrics import rag_request_duration_seconds, rag_requests_total
+from ..database import get_db_session
 from ..schemas.schema import RAGQueryRequest, RAGQueryResponse
 from ..services.rag_service import handle_rag_query
-from ..core.metrics import rag_requests_total, rag_request_duration_seconds
-from ..database import get_db_session
 
 router = APIRouter(prefix="/v1/rag", tags=["RAG"])
 

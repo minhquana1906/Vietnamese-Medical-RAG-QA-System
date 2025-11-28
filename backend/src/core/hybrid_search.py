@@ -1,8 +1,9 @@
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from ..configs.setup import get_backend_settings
+
 from ..configs.logging_config import get_rag_logger
+from ..configs.setup import get_backend_settings
 
 settings = get_backend_settings()
 rag_log = get_rag_logger()
@@ -65,10 +66,8 @@ def hybrid_search(
         if cached_results:
             cache_hit = True
             try:
-                from .metrics import (
-                    rag_search_requests_total,
-                    rag_search_duration_seconds,
-                )
+                from .metrics import (rag_search_duration_seconds,
+                                      rag_search_requests_total)
 
                 rag_search_requests_total.labels(search_type="hybrid").inc()
                 rag_search_duration_seconds.labels(search_type="hybrid").observe(
@@ -109,7 +108,8 @@ def hybrid_search(
 
     # Metrics
     try:
-        from .metrics import rag_search_requests_total, rag_search_duration_seconds
+        from .metrics import (rag_search_duration_seconds,
+                              rag_search_requests_total)
 
         rag_search_requests_total.labels(search_type="hybrid").inc()
         rag_search_duration_seconds.labels(search_type="hybrid").observe(

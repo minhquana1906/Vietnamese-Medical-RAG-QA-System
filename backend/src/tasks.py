@@ -7,19 +7,15 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from .configs.celery_config import get_celery_app
-from .configs.setup import get_backend_settings
 from .configs.logging_config import get_rag_logger
+from .configs.setup import get_backend_settings
+from .core.guardrails import get_guardrails_service
 from .core.vectorize import search_vectors, upsert_points
-from .services.brain import (
-    detect_route,
-    enhance_query_quality,
-    get_tavily_agent_answer,
-    qwen3_chat_complete,
-)
+from .services.brain import (detect_route, enhance_query_quality,
+                             get_tavily_agent_answer, qwen3_chat_complete)
 from .services.chunking import fixed_semantic_chunking
 from .services.embedding import get_embedding_service
 from .services.rerank import get_qwen3_reranker
-from .core.guardrails import get_guardrails_service
 
 settings = get_backend_settings()
 tracer = trace.get_tracer(__name__)
@@ -55,6 +51,7 @@ def chunk_and_index_document(doc_id, title, content, metadata=None):
     """
     try:
         from uuid import UUID
+
         from .database import SessionLocal
         from .models import Chunk
 
@@ -300,6 +297,7 @@ def rag_qa_task(
         skip_input_validation: Skip input validation if already done in bot_route_answer_message
     """
     import time
+
     from .core.model_config import get_generation_model
 
     request_start = time.time()
@@ -357,8 +355,8 @@ def rag_qa_task(
         # STEP 4: HYBRID RETRIEVAL
         # ============================================
         from .core.hybrid_search import hybrid_search
-        from .services.elasticsearch import get_elasticsearch_client
         from .core.vectorize import search_vectors_for_hybrid
+        from .services.elasticsearch import get_elasticsearch_client
 
         def vector_search_fn(query, top_k, doc_type_filter=None, source_filter=None):
             return search_vectors_for_hybrid(
@@ -423,10 +421,8 @@ def rag_qa_task(
         # ============================================
         # STEP 6: HISTORY SUMMARIZATION
         # ============================================
-        from .services.summarizer import (
-            summarize_old_messages,
-            calculate_messages_tokens,
-        )
+        from .services.summarizer import (calculate_messages_tokens,
+                                          summarize_old_messages)
 
         prompt = system_prompt or settings.system_prompt
         messages = [{"role": "system", "content": prompt}]
@@ -583,11 +579,13 @@ def ingest_dataset_task(
             "duration_seconds": float,
         }
     """
-    import time
     import hashlib
+    import time
+
     from datasets import load_dataset
+
     from .database import SessionLocal
-    from .models import Document, Chunk
+    from .models import Chunk, Document
 
     start_time = time.time()
     documents_indexed = 0
@@ -768,10 +766,13 @@ def reindex_document_task(self, document_id: str):
     """
     import time
     from uuid import UUID
+
+    from .core.vectorize import qdrant_client
+    from .core.vectorize import settings as vectorize_settings
     from .database import SessionLocal
-    from .models import Document, Chunk
-    from .core.vectorize import qdrant_client, settings as vectorize_settings
-    from .services.elasticsearch import es_client, settings as es_settings
+    from .models import Chunk, Document
+    from .services.elasticsearch import es_client
+    from .services.elasticsearch import settings as es_settings
 
     start_time = time.time()
 

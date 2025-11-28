@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from ..configs.setup import get_backend_settings
 from ..configs.logging_config import get_rag_logger
+from ..configs.setup import get_backend_settings
 from ..models import Step, Thread, User
 from ..tasks import bot_route_answer_message
 

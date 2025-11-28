@@ -286,20 +286,20 @@ models:
   generation:
     active: "Qwen/Qwen3-4B-Instruct-2507"
     description: "Main generation model for medical QA"
-    
+
   embedding:
     active: "Qwen/Qwen3-Embedding-0.6B"
     description: "Embedding model for semantic search"
-    
+
   reranking:
     active: "Qwen/Qwen3-Reranker-0.6B"
     description: "Reranking model for document scoring"
-    
+
   guardrails:
     active: "Qwen/Qwen3Guard-Gen-0.6B"
     threshold: 0.7
     description: "Content safety guardrails"
-  
+
   stt:
     active: "turbo"
     device: "cuda"
@@ -380,7 +380,7 @@ Vietnamese-Medical-RAG-QA-System/
 1. **Guardrails Validation**: Input query is validated using Qwen3Guard-Gen-0.6B
    - Safety categories: Violent, Sexual, PII, Suicide, Jailbreak, etc.
    - Three-tier severity: Safe, Controversial, Unsafe
-   
+
 2. **Query Enhancement**: Optional query rewriting for improved retrieval
 
 3. **Intent Detection**: Route between RAG pipeline and external search (Tavily)

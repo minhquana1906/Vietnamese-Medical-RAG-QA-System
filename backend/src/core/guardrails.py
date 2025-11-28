@@ -5,16 +5,14 @@ Implementation following official Qwen3Guard-Gen-0.6B best practices.
 Reference: https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B
 """
 
-from typing import Dict, Optional, Tuple
 import re
+from typing import Dict, Optional, Tuple
+
 import httpx
 from loguru import logger
 
 from ..configs.setup import get_backend_settings
-from .model_config import (
-    get_guardrails_model,
-    get_guardrails_threshold,
-)
+from .model_config import get_guardrails_model, get_guardrails_threshold
 
 settings = get_backend_settings()
 

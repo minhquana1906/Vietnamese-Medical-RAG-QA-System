@@ -8,18 +8,16 @@ References:
 - Qwen3Guard: https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B
 """
 
+import re
+from typing import Any, Dict, List, Optional, Tuple
+
 import torch
 import torch.nn.functional as F
 from loguru import logger
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
-from typing import Optional, List, Tuple, Dict, Any
-import re
 
-from .model_config import (
-    get_embedding_model,
-    get_reranking_model,
-    get_guardrails_model,
-)
+from .model_config import (get_embedding_model, get_guardrails_model,
+                           get_reranking_model)
 
 
 class ModelRegistry:

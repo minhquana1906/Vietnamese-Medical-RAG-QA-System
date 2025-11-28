@@ -1,13 +1,13 @@
+import audioop
 from typing import Optional
 
-import numpy as np
-import audioop
 import chainlit as cl
+import numpy as np
 from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
 from chainlit.types import ThreadDict
-from helpers import DATABASE_URL, call_rag_api, simulate_streaming, process_audio
+from helpers import (DATABASE_URL, call_rag_api, process_audio,
+                     simulate_streaming)
 from loguru import logger
-
 
 # Audio detection constants
 # ============================================================================

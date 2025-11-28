@@ -43,7 +43,7 @@ QUY TẮC BẤT DI BẤT DỊCH:
 
 PROMPTS = [
     # Loại 1: Tra cứu (Simple)
-    """Hãy tạo 1 câu hỏi dạng "Tra cứu định nghĩa/thông tin". 
+    """Hãy tạo 1 câu hỏi dạng "Tra cứu định nghĩa/thông tin".
     Ví dụ: "Thuốc X dùng để làm gì?", "Triệu chứng Y là gì?".
     Câu trả lời cần ngắn gọn, súc tích.
     Lưu ý: Bỏ qua toàn bộ thông tin về giới thiệu bệnh viện, số điện thoại hay ứng dụng đặt lịch ở cuối văn bản, sửa lại các lỗi chính tả nếu có.""",

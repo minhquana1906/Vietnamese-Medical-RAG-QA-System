@@ -1,19 +1,19 @@
+import asyncio
+import hashlib
 import os
 import sys
 import time
-import hashlib
-import asyncio
 from pathlib import Path
 from typing import List, Optional
 
-import torch
 import redis
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+import torch
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from faster_whisper import BatchedInferencePipeline, WhisperModel
+from loguru import logger
+from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 from pydantic import BaseModel
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
-from faster_whisper import WhisperModel, BatchedInferencePipeline
-from loguru import logger
-from prometheus_client import Gauge, Histogram, Counter, make_asgi_app
 
 # ============= LOGGING CONFIGURATION =============
 # Remove default logger and add colorized output
@@ -345,8 +345,8 @@ def health_check():
 @app.get("/metrics")
 def metrics():
     """Prometheus metrics endpoint"""
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     from fastapi.responses import Response
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 

@@ -4,7 +4,7 @@ Prometheus Metrics Definitions
 Centralized metrics to avoid circular imports between main.py and routers.
 """
 
-from prometheus_client import Counter, Histogram, Gauge, Info
+from prometheus_client import Counter, Gauge, Histogram, Info
 
 # ============================================================================
 # FASTAPI STANDARD METRICS (for dashboard compatibility)

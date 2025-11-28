@@ -174,7 +174,7 @@ Backend API sử dụng **modular router pattern** với 5 routers:
 
 ### ✅ RAG Evaluation Framework
 - **Added**: Comprehensive evaluation suite with DeepEval + LlamaIndex
-- **Metrics**: 
+- **Metrics**:
   - Retrieval: Recall@K, nDCG@K, MRR, Precision@K
   - Generation: Faithfulness, Answer Relevance, Correctness
   - Performance: Latency (p50, p95), Token usage

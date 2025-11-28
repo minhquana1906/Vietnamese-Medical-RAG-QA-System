@@ -53,14 +53,10 @@ from ragas.llms import LangchainLLMWrapper
 from ragas.testset import TestsetGenerator
 from ragas.testset.persona import Persona
 from ragas.testset.synthesizers import SingleHopSpecificQuerySynthesizer
-from ragas.testset.transforms import (
-    EmbeddingExtractor,
-    KeyphrasesExtractor,
-    SummaryExtractor,
-)
-from ragas.testset.transforms.relationship_builders.cosine import (
-    CosineSimilarityBuilder,
-)
+from ragas.testset.transforms import (EmbeddingExtractor, KeyphrasesExtractor,
+                                      SummaryExtractor)
+from ragas.testset.transforms.relationship_builders.cosine import \
+    CosineSimilarityBuilder
 from sqlalchemy.sql.expression import func
 
 from backend.src.configs.setup import get_backend_settings
@@ -268,7 +264,8 @@ def load_chunks_from_db(
 
 def load_documents_from_directory(doc_dir: str) -> list[LCDocument]:
     """Load documents from directory using LangChain DirectoryLoader."""
-    from langchain_community.document_loaders import DirectoryLoader, TextLoader
+    from langchain_community.document_loaders import (DirectoryLoader,
+                                                      TextLoader)
 
     logger.info(f"Loading documents from directory: {doc_dir}")
     if not os.path.exists(doc_dir):

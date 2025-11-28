@@ -3,12 +3,9 @@
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from ..schemas.schema import (
-    HealthCheckResponse,
-    SystemHealthResponse,
-    CacheStatisticsResponse,
-)
 from ..helpers import check_cache_health, check_database_health
+from ..schemas.schema import (CacheStatisticsResponse, HealthCheckResponse,
+                              SystemHealthResponse)
 
 router = APIRouter(prefix="/v1", tags=["Health & Monitoring"])
 

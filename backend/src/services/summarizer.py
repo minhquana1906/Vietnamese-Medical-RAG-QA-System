@@ -6,7 +6,6 @@ from loguru import logger
 from ..core.cache import get_cached_value, set_cached_value
 from .brain import qwen3_chat_complete
 
-
 MESSAGE_COUNT_THRESHOLD = 8
 TOKEN_BUDGET_DEFAULT = 1500
 RECENT_MESSAGES_TO_KEEP = 2

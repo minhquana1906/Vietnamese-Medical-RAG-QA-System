@@ -3,8 +3,8 @@
 ## Fixed Issues (2025-11-25)
 
 ### 1. FastAPI Metrics Not Showing
-**Problem**: Prometheus không thể scrape metrics từ FastAPI backend.  
-**Root Cause**: Metrics endpoint có trailing slash (`/metrics/`) nhưng Prometheus config chỉ định `/metrics`.  
+**Problem**: Prometheus không thể scrape metrics từ FastAPI backend.
+**Root Cause**: Metrics endpoint có trailing slash (`/metrics/`) nhưng Prometheus config chỉ định `/metrics`.
 **Solution**: Updated Prometheus config to use `/metrics/` path.
 
 ```yaml
@@ -14,12 +14,12 @@
 ```
 
 ### 2. vLLM Metrics Not Showing
-**Problem**: Grafana dashboard chỉ hiển thị 4 models (embedding, rerank, guardrails, stt) thay vì 5 (thêm generation model từ vLLM).  
-**Root Cause**: 
+**Problem**: Grafana dashboard chỉ hiển thị 4 models (embedding, rerank, guardrails, stt) thay vì 5 (thêm generation model từ vLLM).
+**Root Cause**:
 - vLLM remote server có Basic Authentication (401 Unauthorized)
 - Prometheus config không có credentials để scrape metrics
 
-**Solution**: 
+**Solution**:
 1. Added basic_auth configuration cho vLLM job
 2. Cần thêm env vars vào monitoring stack
 
@@ -51,8 +51,8 @@ services:
 ```
 
 ### 3. Tempo Tracing Not Working
-**Problem**: Không thể trace requests qua Tempo.  
-**Root Cause**: 
+**Problem**: Không thể trace requests qua Tempo.
+**Root Cause**:
 - `tempo_endpoint` không được define trong backend settings
 - Hardcoded fallback không được sử dụng đúng cách
 

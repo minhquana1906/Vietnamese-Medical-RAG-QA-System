@@ -1,10 +1,11 @@
 """OpenTelemetry Tracing Utilities for RAG Pipeline"""
 
 from functools import wraps
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
+
+from loguru import logger
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
-from loguru import logger
 
 tracer = trace.get_tracer(__name__)
 

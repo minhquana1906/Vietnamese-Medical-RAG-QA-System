@@ -11,24 +11,22 @@ from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from ..schemas.schema import SttResponse, TtsRequest, AudioRagResponse
+from ..configs.setup import get_backend_settings
+from ..database import get_db_session
+from ..schemas.schema import AudioRagResponse, SttResponse, TtsRequest
+from ..services.rag_service import handle_speech_rag_query
 from ..services.stt_service import SttService
 from ..services.tts_service import TtsService
-from ..services.rag_service import handle_speech_rag_query
-from ..database import get_db_session
-from ..configs.setup import get_backend_settings
 
 settings = get_backend_settings()
 
 router = APIRouter(prefix="/v1", tags=["Audio & Speech"])
 
 # Import metrics from centralized module
-from ..core.metrics import (
-    model_inference_duration_seconds,
-    voice_request_duration_seconds,
-    audio_rag_stage_duration_seconds,
-    voice_request_errors_total,
-)
+from ..core.metrics import (audio_rag_stage_duration_seconds,
+                            model_inference_duration_seconds,
+                            voice_request_duration_seconds,
+                            voice_request_errors_total)
 
 # Audio storage directory
 AUDIO_DIR = Path("/tmp/audio")

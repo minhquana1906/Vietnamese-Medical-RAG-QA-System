@@ -17,7 +17,7 @@ scrape_configs:
     relabel_configs:
       # Extract container name
       - source_labels: ['__meta_docker_container_name']
-        regex: '/(.*)'  
+        regex: '/(.*)'
         target_label: 'container'
       # Extract container ID
       - source_labels: ['__meta_docker_container_id']
