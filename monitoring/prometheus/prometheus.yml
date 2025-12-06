@@ -33,12 +33,12 @@ scrape_configs:
   # vLLM model serving (remote server with Bearer token)
   - job_name: 'vllm'
     static_configs:
-      - targets: ['171.248.40.12:44624']
+      - targets: ['1.208.108.242:58548']
     metrics_path: '/metrics'
     scrape_interval: 10s
     authorization:
       type: Bearer
-      credentials: 5ea73a8fef8b4e4f0ab4074b6812e2cbc415073a24302fe5b729e93932f17310
+      credentials: ba560c57a04aba70c5ac66ac5280f21648413b384f118b09bb4e15bf89556c41
 
   # GPU service (Qwen3 models + Whisper-turbo)
   - job_name: 'gpu_service'
