@@ -35,11 +35,14 @@ def test_stt_tts_audio_rag_if_sample_available(client):
     assert int(resp_tts.headers.get("Content-Length", "0")) >= 0
 
     # Audio RAG
+    import uuid
+
+    thread_id = str(uuid.uuid4())
     with open(audio_path, "rb") as f:
         files = {"file": (audio_path.name, f, "audio/wav")}
         data = {
             "user_identifier": "test-user",
-            "thread_id": "audio-thread",
+            "thread_id": thread_id,
             "language": "vi",
         }
         resp_audio_rag = client.post("/v1/rag/audio", files=files, data=data)

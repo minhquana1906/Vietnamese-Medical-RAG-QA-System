@@ -5,9 +5,14 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from .prompt_templates import (INTENT_DETECTION_PROMPT, RAG_PROMPT,
-                               REWRITE_USER_PROMPT, SPEECH_RAG_PROMPT,
-                               SPEECH_RAG_SYSTEM_PROMPT, SYSTEM_PROMPT)
+from .prompt_templates import (
+    INTENT_DETECTION_PROMPT,
+    RAG_PROMPT,
+    REWRITE_USER_PROMPT,
+    SPEECH_RAG_PROMPT,
+    SPEECH_RAG_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+)
 
 load_dotenv()
 
@@ -87,6 +92,11 @@ class BackendSettings(BaseSettings):
     )
     qwen3_models_enabled: bool = Field(
         default=os.getenv("QWEN3_MODELS_ENABLED", "true").lower() == "true"
+    )
+
+    # Guardrails Configuration (can be disabled for load testing)
+    guardrails_enabled: bool = Field(
+        default=os.getenv("GUARDRAILS_ENABLED", "true").lower() == "true"
     )
 
     # Vector Database

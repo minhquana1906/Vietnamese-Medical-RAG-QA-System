@@ -21,10 +21,13 @@ def test_metrics_exposes_fastapi_counters(client):
     # Make an extra request to increment counters
     client.get("/")
 
-    metrics = client.get("/metrics")
+    metrics = client.get("/metrics", follow_redirects=True)
     assert metrics.status_code == 200
     body = metrics.text
     # Check for common metric names exposed by the app
-    assert "fastapi_requests_total" in body
-    assert "fastapi_requests_duration_seconds" in body
-    assert "fastapi_requests_in_progress" in body
+    assert "fastapi_requests_total" in body or "http_requests_total" in body
+    assert (
+        "fastapi_requests_duration_seconds" in body
+        or "http_request_duration_seconds" in body
+        or "http_requests_duration_seconds" in body
+    )

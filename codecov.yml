@@ -1,0 +1,45 @@
+# Code Coverage Configuration for Vietnamese Medical RAG System
+
+# Codecov.io configuration
+# Documentation: https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+        base: auto
+        if_ci_failed: error
+    
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+        base: auto
+        if_ci_failed: error
+
+  ignore:
+    - "backend/src/alembic/**/*"
+    - "tests/**/*"
+    - "**/__pycache__/**/*"
+    - "**/conftest.py"
+    - "**/*.pyi"
+    - "scripts/**/*"
+    - "frontend/**/*"
+    - "serving/**/*"
+    - "monitoring/**/*"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+github_checks:
+  annotations: true

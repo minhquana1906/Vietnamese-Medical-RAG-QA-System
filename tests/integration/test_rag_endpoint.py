@@ -1,7 +1,5 @@
 from uuid import uuid4
 
-from backend.src.schemas.schema import RAGQueryRequest
-
 
 def test_rag_query_smoke(client):
     # Use a random thread_id; if it doesn't exist, service should still return a graceful message

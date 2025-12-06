@@ -10,17 +10,22 @@ from loguru import logger
 from ..core.cache import invalidate_search_cache
 from ..database import SessionLocal
 from ..models import Chunk, Document, init_db, insert_document
-from ..schemas.schema import (DocumentCreate, DocumentDetailResponse,
-                              DocumentListResponse, DocumentResponse,
-                              IndexingJobStatusResponse, IngestDatasetRequest,
-                              IngestDatasetResponse, ReindexDocumentResponse)
+from ..schemas.schema import (
+    DocumentCreate,
+    DocumentDetailResponse,
+    DocumentListResponse,
+    DocumentResponse,
+    IndexingJobStatusResponse,
+    IngestDatasetRequest,
+    IngestDatasetResponse,
+    ReindexDocumentResponse,
+)
 from ..tasks import chunk_and_index_document
 
 router = APIRouter(prefix="/v1", tags=["Documents & Indexing"])
 
 # Metrics (imported from main.py)
-from ..core.metrics import (document_indexing_duration_seconds,
-                            document_indexing_total)
+from ..core.metrics import document_indexing_duration_seconds, document_indexing_total
 
 
 @router.post("/indexing/ingest-dataset", response_model=IngestDatasetResponse)
@@ -35,7 +40,7 @@ async def ingest_dataset(request: IngestDatasetRequest):
 
         logger.info(
             f"Starting dataset ingestion: {request.dataset_name} "
-            f"(split={request.split}, limit={request.limit})"
+            f"(split={request.split}, limit={request.max_documents})"
         )
 
         # Load dataset from HuggingFace
@@ -43,20 +48,18 @@ async def ingest_dataset(request: IngestDatasetRequest):
 
         dataset = load_dataset(request.dataset_name, split=request.split)
 
-        if request.limit:
-            dataset = dataset.select(range(min(request.limit, len(dataset))))
+        if request.max_documents:
+            dataset = dataset.select(range(min(request.max_documents, len(dataset))))
 
         logger.info(f"Loaded {len(dataset)} documents from {request.dataset_name}")
 
         # Insert documents to database
-        db = SessionLocal()
         job_id = str(UUID(int=int(time.time() * 1000000) % (2**128)))
-        document_ids = []
+        documents_data = []
 
         try:
             for idx, item in enumerate(dataset):
                 doc = insert_document(
-                    db=db,
                     title=item.get("title", f"Document {idx}"),
                     content=item.get("content", ""),
                     metadata={
@@ -66,27 +69,39 @@ async def ingest_dataset(request: IngestDatasetRequest):
                         **item,
                     },
                 )
-                document_ids.append(str(doc.id))
+                documents_data.append(
+                    {
+                        "id": str(doc.id),
+                        "title": doc.title,
+                        "content": doc.content,
+                        "metadata": doc.metadata_,
+                    }
+                )
 
-            db.commit()
-            logger.info(f"✅ Inserted {len(document_ids)} documents to database")
+            logger.info(f"✅ Inserted {len(documents_data)} documents to database")
 
-        finally:
-            db.close()
+        except Exception as e:
+            logger.error(f"Failed to insert documents: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
         # Submit async indexing jobs
-        for doc_id in document_ids:
-            chunk_and_index_document.delay(doc_id)
+        for doc_data in documents_data:
+            chunk_and_index_document.delay(
+                doc_id=doc_data["id"],
+                title=doc_data["title"],
+                content=doc_data["content"],
+                metadata=doc_data["metadata"],
+            )
 
         duration = time.time() - start_time
-        document_indexing_total.labels(status="submitted").inc(len(document_ids))
+        document_indexing_total.labels(status="submitted").inc(len(documents_data))
 
         return IngestDatasetResponse(
             job_id=job_id,
             dataset_name=request.dataset_name,
-            total_documents=len(document_ids),
+            total_documents=len(documents_data),
             status="submitted",
-            message=f"Dataset ingestion started. {len(document_ids)} documents queued for indexing.",
+            message=f"Dataset ingestion started. {len(documents_data)} documents queued for indexing.",
         )
 
     except Exception as e:
@@ -108,20 +123,20 @@ async def get_indexing_job_status(job_id: str):
         try:
             # Count indexed vs total documents
             total_docs = db.query(Document).count()
-            indexed_docs = (
-                db.query(Document).filter(Document.is_indexed == True).count()
-            )
+            indexed_docs = db.query(Document).join(Chunk).distinct().count()
 
             progress = (indexed_docs / total_docs * 100) if total_docs > 0 else 0
 
             return IndexingJobStatusResponse(
                 job_id=job_id,
                 status="completed" if progress >= 100 else "running",
-                progress=progress,
-                total_documents=total_docs,
-                indexed_documents=indexed_docs,
-                failed_documents=0,
-                message=f"Indexing progress: {indexed_docs}/{total_docs} documents",
+                progress={
+                    "percent": progress,
+                    "total_documents": total_docs,
+                    "indexed_documents": indexed_docs,
+                    "failed_documents": 0,
+                    "message": f"Indexing progress: {indexed_docs}/{total_docs} documents",
+                },
             )
 
         finally:
@@ -150,11 +165,11 @@ async def list_documents(
 
             # Apply filters
             if source:
-                query = query.filter(Document.metadata["source"].astext == source)
-            if doc_type:
-                query = query.filter(Document.metadata["type"].astext == doc_type)
-            if is_indexed is not None:
-                query = query.filter(Document.is_indexed == is_indexed)
+                query = query.filter(Document.metadata_["source"].astext == source)
+            # if doc_type:
+            #     query = query.filter(Document.metadata_["type"].astext == doc_type)
+            # if is_indexed is not None:
+            #     query = query.filter(Document.is_indexed == is_indexed)
 
             # Get total count
             total = query.count()
@@ -172,10 +187,10 @@ async def list_documents(
                             if len(doc.content) > 200
                             else doc.content
                         ),
-                        metadata=doc.metadata,
-                        is_indexed=doc.is_indexed,
-                        created_at=doc.created_at,
-                        updated_at=doc.updated_at,
+                        metadata=doc.metadata_,
+                        is_indexed=False,
+                        created_at=doc.createdAt.isoformat() if doc.createdAt else "",
+                        updated_at=None,
                     )
                     for doc in documents
                 ],
@@ -200,30 +215,23 @@ async def create_document(request: DocumentCreate):
     Use POST /v1/indexing/reindex-document/{document_id} to chunk and index this document.
     """
     try:
-        db = SessionLocal()
-        try:
-            doc = insert_document(
-                db=db,
-                title=request.title,
-                content=request.content,
-                metadata=request.metadata or {},
-            )
-            db.commit()
+        doc = insert_document(
+            title=request.title,
+            content=request.content,
+            metadata=request.metadata or {},
+        )
 
-            logger.info(f"✅ Created document: {doc.id} - {doc.title}")
+        logger.info(f"✅ Created document: {doc.id} - {doc.title}")
 
-            return DocumentResponse(
-                id=doc.id,
-                title=doc.title,
-                content=doc.content,
-                metadata=doc.metadata,
-                is_indexed=doc.is_indexed,
-                created_at=doc.created_at,
-                updated_at=doc.updated_at,
-            )
-
-        finally:
-            db.close()
+        return DocumentResponse(
+            id=doc.id,
+            title=doc.title,
+            content=doc.content,
+            metadata=doc.metadata_,
+            is_indexed=False,
+            created_at=doc.createdAt.isoformat() if doc.createdAt else "",
+            updated_at=None,
+        )
 
     except Exception as e:
         logger.error(f"Failed to create document: {e}")
@@ -244,22 +252,22 @@ async def get_document(document_id: UUID):
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Get all chunks
-            chunks = db.query(Chunk).filter(Chunk.document_id == document_id).all()
+            chunks = db.query(Chunk).filter(Chunk.documentId == document_id).all()
 
             return DocumentDetailResponse(
                 id=doc.id,
                 title=doc.title,
                 content=doc.content,
-                metadata=doc.metadata,
-                is_indexed=doc.is_indexed,
-                created_at=doc.created_at,
-                updated_at=doc.updated_at,
+                metadata=doc.metadata_,
+                is_indexed=False,
+                created_at=doc.createdAt.isoformat() if doc.createdAt else "",
+                updated_at=None,
                 chunks=[
                     {
                         "id": str(chunk.id),
-                        "chunk_index": chunk.chunk_index,
                         "content": chunk.content,
-                        "metadata": chunk.metadata,
+                        "chunk_index": chunk.chunkIndex,
+                        "metadata": chunk.metadata_,
                     }
                     for chunk in chunks
                 ],
@@ -299,17 +307,17 @@ async def delete_document(document_id: UUID):
                 logger.warning(f"Failed to delete from Qdrant: {e}")
 
             # Delete from Elasticsearch
-            from ..services.elasticsearch import ElasticsearchService
+            from ..services.elasticsearch import ElasticsearchClient
 
             try:
-                es_service = ElasticsearchService()
-                es_service.delete_by_document_id(str(document_id))
+                es_client = ElasticsearchClient()
+                es_client.delete_document_chunks(str(document_id))
                 logger.info(f"Deleted document {document_id} from Elasticsearch")
             except Exception as e:
                 logger.warning(f"Failed to delete from Elasticsearch: {e}")
 
             # Delete chunks from database
-            db.query(Chunk).filter(Chunk.document_id == document_id).delete()
+            db.query(Chunk).filter(Chunk.documentId == document_id).delete()
 
             # Delete document from database
             db.delete(doc)

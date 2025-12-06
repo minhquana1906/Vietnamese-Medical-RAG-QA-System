@@ -1,6 +1,13 @@
 from loguru import logger
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    PointStruct,
+    VectorParams,
+    Filter,
+    FieldCondition,
+    MatchValue,
+)
 
 from ..configs.setup import get_backend_settings
 
@@ -64,7 +71,29 @@ def upsert_points(points, collection_name=settings.default_collection_name):
         )
         return results
     except Exception as e:
-        logger.error(f"Error upserting points: {e}")
+        logger.error(f"Error upserting points to Qdrant: {e}")
+        raise
+
+
+def delete_points_by_document_id(
+    document_id, collection_name=settings.default_collection_name
+):
+    try:
+        client = get_qdrant_client()
+        client.delete(
+            collection_name=collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=str(document_id)),
+                    )
+                ]
+            ),
+        )
+        logger.info(f"Deleted points for document {document_id} from Qdrant")
+    except Exception as e:
+        logger.error(f"Error deleting points from Qdrant: {e}")
         raise
 
 

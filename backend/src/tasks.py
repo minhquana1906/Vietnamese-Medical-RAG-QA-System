@@ -11,8 +11,12 @@ from .configs.logging_config import get_rag_logger
 from .configs.setup import get_backend_settings
 from .core.guardrails import get_guardrails_service
 from .core.vectorize import search_vectors, upsert_points
-from .services.brain import (detect_route, enhance_query_quality,
-                             get_tavily_agent_answer, qwen3_chat_complete)
+from .services.brain import (
+    detect_route,
+    enhance_query_quality,
+    get_tavily_agent_answer,
+    qwen3_chat_complete,
+)
 from .services.chunking import fixed_semantic_chunking
 from .services.embedding import get_embedding_service
 from .services.rerank import get_qwen3_reranker
@@ -219,26 +223,29 @@ def bot_route_answer_message(history, question, system_prompt=None):
     # ============================================
     # STEP 0: INPUT VALIDATION (Qwen3Guard) - BEFORE ROUTING
     # ============================================
-    guardrails = get_guardrails_service()
-    is_valid_input, violation_category, input_metadata = guardrails.validate_query(
-        question
-    )
-
-    rag_log.log_guardrails_input(
-        is_valid=is_valid_input,
-        category=violation_category,
-        severity=input_metadata.get("severity") if input_metadata else None,
-    )
-
-    if not is_valid_input:
-        rejection_message = guardrails.get_rejection_message(
-            violation_category, language="vi"
+    if settings.guardrails_enabled:
+        guardrails = get_guardrails_service()
+        is_valid_input, violation_category, input_metadata = guardrails.validate_query(
+            question
         )
-        logger.warning(
-            f"[GUARD] ⛔ Input rejected: category={violation_category}, "
-            f"severity={input_metadata.get('severity') if input_metadata else 'unknown'}"
+
+        rag_log.log_guardrails_input(
+            is_valid=is_valid_input,
+            category=violation_category,
+            severity=input_metadata.get("severity") if input_metadata else None,
         )
-        return rejection_message
+
+        if not is_valid_input:
+            rejection_message = guardrails.get_rejection_message(
+                violation_category, language="vi"
+            )
+            logger.warning(
+                f"[GUARD] ⛔ Input rejected: category={violation_category}, "
+                f"severity={input_metadata.get('severity') if input_metadata else 'unknown'}"
+            )
+            return rejection_message
+    else:
+        logger.debug("[GUARD] Guardrails disabled, skipping input validation")
 
     # ============================================
     # STEP 1: ROUTE DETECTION
@@ -303,13 +310,12 @@ def rag_qa_task(
     request_start = time.time()
 
     try:
-        guardrails = get_guardrails_service()
-
         # ============================================
         # STEP 1: INPUT VALIDATION (Qwen3Guard)
-        # Skip if already validated in bot_route_answer_message
+        # Skip if already validated in bot_route_answer_message OR if disabled
         # ============================================
-        if not skip_input_validation:
+        if not skip_input_validation and settings.guardrails_enabled:
+            guardrails = get_guardrails_service()
             is_valid_input, violation_category, input_metadata = (
                 guardrails.validate_query(question)
             )
@@ -421,8 +427,10 @@ def rag_qa_task(
         # ============================================
         # STEP 6: HISTORY SUMMARIZATION
         # ============================================
-        from .services.summarizer import (calculate_messages_tokens,
-                                          summarize_old_messages)
+        from .services.summarizer import (
+            calculate_messages_tokens,
+            summarize_old_messages,
+        )
 
         prompt = system_prompt or settings.system_prompt
         messages = [{"role": "system", "content": prompt}]
@@ -501,36 +509,44 @@ def rag_qa_task(
                 use_web_search=use_web_search,
             )
 
-            # Output validation
-            is_valid_output, output_violation, output_metadata = (
-                guardrails.validate_response(
-                    response, question, max_retries=max_retries
+            # Output validation (skip if guardrails disabled)
+            if settings.guardrails_enabled:
+                guardrails = get_guardrails_service()
+                is_valid_output, output_violation, output_metadata = (
+                    guardrails.validate_response(
+                        response, question, max_retries=max_retries
+                    )
                 )
-            )
 
-            rag_log.log_guardrails_output(
-                is_valid=is_valid_output,
-                category=output_violation,
-                severity=output_metadata.get("severity") if output_metadata else None,
-                attempt=retry_count + 1,
-            )
+                rag_log.log_guardrails_output(
+                    is_valid=is_valid_output,
+                    category=output_violation,
+                    severity=(
+                        output_metadata.get("severity") if output_metadata else None
+                    ),
+                    attempt=retry_count + 1,
+                )
 
-            if is_valid_output:
+                if is_valid_output:
+                    final_response = response
+                    break
+                else:
+                    if retry_count < max_retries:
+                        feedback = output_metadata.get(
+                            "feedback",
+                            "Please revise your response to be safer and more appropriate.",
+                        )
+                        retry_count += 1
+                    else:
+                        final_response = (
+                            "Xin lỗi, tôi không thể tạo ra câu trả lời phù hợp cho câu hỏi này. "
+                            "Vui lòng thử lại với cách diễn đạt khác hoặc liên hệ với bác sĩ để được tư vấn trực tiếp."
+                        )
+                        break
+            else:
+                # Guardrails disabled, accept response without validation
                 final_response = response
                 break
-            else:
-                if retry_count < max_retries:
-                    feedback = output_metadata.get(
-                        "feedback",
-                        "Please revise your response to be safer and more appropriate.",
-                    )
-                    retry_count += 1
-                else:
-                    final_response = (
-                        "Xin lỗi, tôi không thể tạo ra câu trả lời phù hợp cho câu hỏi này. "
-                        "Vui lòng thử lại với cách diễn đạt khác hoặc liên hệ với bác sĩ để được tư vấn trực tiếp."
-                    )
-                    break
 
         rag_log.log_request_complete(request_start, success=True)
         return final_response

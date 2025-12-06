@@ -21,7 +21,13 @@ test: ## Run tests
 
 test-cov: ## Run tests with coverage
 	@echo "🧪 Running tests with coverage"
-	@uv run pytest tests/ -v --cov=backend/src --cov-report=term-missing --cov-report=html
+	@uv run pytest tests/integration/ -v --cov=backend/src --cov-report=term-missing --cov-report=html --cov-report=xml --cov-branch
+
+test-cov-report: ## Generate detailed coverage report
+	@echo "📊 Generating coverage report"
+	@uv run python scripts/generate_coverage_report.py
+
+coverage: test-cov-report ## Alias for test-cov-report
 
 test-unit: ## Run only unit tests
 	@echo "🧪 Running unit tests"
@@ -37,7 +43,7 @@ build: clean-build ## Build wheel file
 
 clean-build: ## Clean build artifacts
 	@echo "🧹 Cleaning build artifacts"
-	@rm -rf dist/ build/ *.egg-info/ htmlcov/ .coverage
+	@rm -rf dist/ build/ *.egg-info/ htmlcov/ .coverage coverage.xml coverage.json .pytest_cache/
 	@find . -type d -name __pycache__ -delete
 	@find . -type f -name "*.pyc" -delete
 

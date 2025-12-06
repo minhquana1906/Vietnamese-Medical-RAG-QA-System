@@ -168,44 +168,76 @@ class Qwen3GuardService:
             return True, None, {"error": str(e), "failover": True}
 
     def _check_with_local(
-        self, text: str, check_type: str = "input", query: Optional[str] = None
+        self,
+        text: str,
+        check_type: str = "input",
+        query: Optional[str] = None,
+        max_retries: int = 2,
     ) -> Tuple[bool, str, list, Optional[str], Dict]:
-        """Check text safety using local FastAPI endpoint with Qwen3Guard-Gen-0.6B."""
-        try:
-            payload = {"text": text, "check_type": check_type}
-            if check_type == "output" and query:
-                payload["query"] = query
+        """Check text safety using local FastAPI endpoint with Qwen3Guard-Gen-0.6B with retry logic."""
+        import time
 
-            response = self.client.post(
-                f"{self.local_url}/v1/models/guard",
-                json=payload,
-                timeout=10.0,
-            )
+        payload = {"text": text, "check_type": check_type}
+        if check_type == "output" and query:
+            payload["query"] = query
 
-            if response.status_code != 200:
-                raise Exception(
-                    f"Qwen3Guard failed: {response.status_code} - {response.text}"
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.client.post(
+                    f"{self.local_url}/v1/models/guard",
+                    json=payload,
+                    timeout=30.0,  # Increased for load testing
                 )
 
-            result = response.json()
-            raw_output = result.get("raw_output", "")
-            severity = self._parse_severity(raw_output)
-            categories = self._parse_categories(raw_output)
-            refusal = (
-                self._parse_refusal(raw_output) if check_type == "output" else None
-            )
+                if response.status_code != 200:
+                    raise Exception(
+                        f"Qwen3Guard failed: {response.status_code} - {response.text}"
+                    )
 
-            is_safe = severity == "Safe"
-            details = {
-                "raw_output": raw_output,
-                "model": self.huggingface_model,
-            }
+                result = response.json()
+                raw_output = result.get("raw_output", "")
+                severity = self._parse_severity(raw_output)
+                categories = self._parse_categories(raw_output)
+                refusal = (
+                    self._parse_refusal(raw_output) if check_type == "output" else None
+                )
 
-            return is_safe, severity, categories, refusal, details
+                is_safe = severity == "Safe"
+                details = {
+                    "raw_output": raw_output,
+                    "model": self.huggingface_model,
+                    "attempt": attempt + 1,
+                }
 
-        except Exception as e:
-            logger.error(f"[GUARD] Check failed: {e}")
-            raise
+                return is_safe, severity, categories, refusal, details
+
+            except httpx.TimeoutException as e:
+                last_error = e
+                if attempt < max_retries:
+                    wait_time = (2**attempt) * 0.5  # 0.5s, 1s, 2s
+                    logger.warning(
+                        f"[GUARD] Timeout on attempt {attempt + 1}/{max_retries + 1}, retrying in {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error(
+                        f"[GUARD] Check failed after {max_retries + 1} attempts: {e}"
+                    )
+                    raise
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    wait_time = (2**attempt) * 0.5
+                    logger.warning(
+                        f"[GUARD] Error on attempt {attempt + 1}/{max_retries + 1}, retrying in {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error(
+                        f"[GUARD] Check failed after {max_retries + 1} attempts: {e}"
+                    )
+                    raise
 
     def _parse_severity(self, raw_output: str) -> str:
         """Parse severity level from Qwen3Guard output."""
@@ -281,16 +313,16 @@ class Qwen3GuardService:
     def get_rejection_message(self, category: str, language: str = "vi") -> str:
         """Get user-facing rejection message based on violation category."""
         messages_vi = {
-            "Violent": "Xin lỗi, tôi không thể trả lời các câu hỏi liên quan đến bạo lực hoặc vũ khí.",
-            "Non-violent Illegal Acts": "Xin lỗi, tôi không thể cung cấp hướng dẫn về các hoạt động bất hợp pháp.",
-            "Sexual Content or Sexual Acts": "Xin lỗi, tôi không thể trả lời các câu hỏi có nội dung không phù hợp.",
-            "PII": "Xin lỗi, tôi không thể chia sẻ hoặc yêu cầu thông tin cá nhân nhạy cảm.",
-            "Suicide & Self-Harm": "Tôi rất lo lắng về bạn. Vui lòng liên hệ với chuyên gia tâm lý hoặc đường dây nóng hỗ trợ khủng hoảng.",
-            "Unethical Acts": "Xin lỗi, tôi không thể trả lời các câu hỏi có nội dung phân biệt đối xử hoặc kỳ thị.",
-            "Politically Sensitive Topics": "Xin lỗi, tôi không thể cung cấp thông tin về các chủ đề chính trị nhạy cảm.",
-            "Copyright Violation": "Xin lỗi, tôi không thể cung cấp nội dung vi phạm bản quyền.",
-            "Jailbreak": "Xin lỗi, tôi không thể thực hiện yêu cầu của bạn.",
-            "empty_query": "Xin vui lòng nhập câu hỏi của bạn.",
+            "Violent": "Là một trợ lý y tế, tôi ưu tiên sự an toàn và sức khỏe con người. Tôi xin từ chối thảo luận các nội dung liên quan đến bạo lực, gây thương tích hoặc sử dụng vũ khí.",
+            "Non-violent Illegal Acts": "Tôi hoạt động dựa trên các quy định pháp luật và đạo đức y khoa. Tôi không thể hỗ trợ hoặc hướng dẫn các hành vi trái pháp luật dưới bất kỳ hình thức nào.",
+            "Sexual Content or Sexual Acts": "Tôi có thể giải đáp các vấn đề về sức khỏe sinh sản dưới góc độ y học. Tuy nhiên, tôi xin từ chối phản hồi các nội dung mang tính khiêu dâm hoặc không phù hợp chuẩn mực.",
+            "PII": "Để bảo vệ quyền riêng tư và tuân thủ bảo mật dữ liệu y tế, tôi không được phép thu thập, chia sẻ hoặc truy xuất thông tin định danh cá nhân cụ thể.",
+            "Suicide & Self-Harm": "Nếu bạn hoặc ai đó đang gặp nguy hiểm, xin hãy gọi ngay số cấp cứu (115) hoặc đến cơ sở y tế gần nhất. Tôi là AI và không thể thay thế sự can thiệp khẩn cấp của bác sĩ.",
+            "Unethical Acts": "Nội dung này không phù hợp với chuẩn mực đạo đức y khoa và cộng đồng. Tôi xin phép không tham gia thảo luận về các vấn đề mang tính kỳ thị hoặc phi đạo đức.",
+            "Politically Sensitive Topics": "Chức năng của tôi là hỗ trợ thông tin y tế và sức khỏe. Tôi xin phép không bình luận về các chủ đề chính trị hoặc các vấn đề xã hội nhạy cảm nằm ngoài phạm vi chuyên môn.",
+            "Copyright Violation": "Tôi không thể cung cấp trực tiếp tài liệu này do quy định về bản quyền. Tuy nhiên, tôi có thể giải thích các khái niệm y khoa liên quan nếu bạn cần.",
+            "Jailbreak": "Tôi là trợ lý AI chuyên về y tế với các thiết lập an toàn nghiêm ngặt. Tôi không thể thực hiện các yêu cầu nhằm thay đổi vai trò hoặc vượt qua các rào cản bảo mật này.",
+            "empty_query": "Tôi chưa nhận được nội dung từ bạn. Bạn đang quan tâm đến vấn đề sức khỏe hoặc triệu chứng nào không?",
         }
 
         messages_en = {

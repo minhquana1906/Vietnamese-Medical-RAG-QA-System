@@ -4,8 +4,11 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from ..helpers import check_cache_health, check_database_health
-from ..schemas.schema import (CacheStatisticsResponse, HealthCheckResponse,
-                              SystemHealthResponse)
+from ..schemas.schema import (
+    CacheStatisticsResponse,
+    HealthCheckResponse,
+    SystemHealthResponse,
+)
 
 router = APIRouter(prefix="/v1", tags=["Health & Monitoring"])
 
@@ -14,7 +17,7 @@ router = APIRouter(prefix="/v1", tags=["Health & Monitoring"])
 async def readiness_check():
     """Readiness probe for Kubernetes/Docker"""
     try:
-        check_database_health()
+        await check_database_health()
         return {"status": "ready"}
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
@@ -29,11 +32,17 @@ async def health_check():
     tracer = trace.get_tracer(__name__)
 
     with tracer.start_as_current_span("health_check"):
-        database_status = check_database_health()
-        cache_status = check_cache_health()
+        database_status = await check_database_health()
+        cache_status = await check_cache_health()
+
+        # Determine overall status
+        all_healthy = database_status.status == "ok" and cache_status.status == "ok"
 
         return SystemHealthResponse(
-            status="healthy" if database_status and cache_status else "unhealthy",
+            status="healthy" if all_healthy else "unhealthy",
+            api=HealthCheckResponse(
+                status="ok", service="api", message="API is running"
+            ),
             database=database_status,
             cache=cache_status,
         )
@@ -53,14 +62,14 @@ async def get_cache_statistics():
         stats = get_cache_stats()
 
         return CacheStatisticsResponse(
+            total_keys=stats.get("total_keys", 0),
+            embedding_cache_keys=stats.get("embedding_cache_keys", 0),
+            search_cache_keys=stats.get("search_cache_keys", 0),
+            conversation_keys=stats.get("conversation_keys", 0),
+            keyspace_hits=stats.get("keyspace_hits", 0),
+            keyspace_misses=stats.get("keyspace_misses", 0),
             hit_rate=stats.get("hit_rate", 0.0),
-            total_hits=stats.get("total_hits", 0),
-            total_misses=stats.get("total_misses", 0),
-            total_entries=stats.get("total_entries", 0),
-            memory_used_bytes=stats.get("memory_used_bytes", 0),
-            memory_peak_bytes=stats.get("memory_peak_bytes", 0),
-            evictions=stats.get("evictions", 0),
-            cache_namespaces=stats.get("cache_namespaces", {}),
+            memory_used=None,  # Not available from Redis INFO stats
         )
     except HTTPException:
         raise

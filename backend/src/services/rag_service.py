@@ -154,12 +154,13 @@ def handle_rag_query(
             None,
         )
 
-    # Get thread (must exist from Chainlit)
-    thread = get_thread(db, thread_id)
+    # Get or create thread (auto-create for API/Locust usage)
+    thread = get_or_create_thread(db, thread_id, str(user.id))
+
     if not thread:
-        logger.error(f"[RAG] Thread not found: {thread_id}")
+        logger.error(f"[RAG] Thread creation failed: {thread_id}")
         return (
-            "❌ Không tìm thấy cuộc trò chuyện. Vui lòng làm mới trang và thử lại.",
+            "❌ Không thể tạo cuộc trò chuyện. Vui lòng thử lại.",
             None,
         )
 

@@ -31,6 +31,7 @@ dev = [
     "tox-uv<=1.11.3",
     "mypy>=0.991",
     "ruff>=0.11.5",
+    "locust>=2.42.6",
 ]
 backend = [
     "alembic>=1.16.5",

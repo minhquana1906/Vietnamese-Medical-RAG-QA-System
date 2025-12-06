@@ -8,8 +8,14 @@ from loguru import logger
 
 from ..configs.setup import get_backend_settings
 from ..core.guardrails import Qwen3GuardService
-from ..schemas.schema import (EmbedRequest, EmbedResponse, GuardRequest,
-                              GuardResponse, RerankRequest, RerankResponse)
+from ..schemas.schema import (
+    EmbedRequest,
+    EmbedResponse,
+    GuardRequest,
+    GuardResponse,
+    RerankRequest,
+    RerankResponse,
+)
 from ..services.embedding import Qwen3EmbeddingService
 from ..services.rerank import Qwen3RerankerService
 
@@ -39,12 +45,21 @@ async def embed_endpoint(request: EmbedRequest):
 
         # Delegate to embedding service (auto-routes to GPU or CPU)
         embedding_service = Qwen3EmbeddingService()
-        embeddings = await embedding_service.embed_batch_documents(
-            texts=request.texts,
-            normalize=request.normalize,
-            is_query=request.is_query,
-            instruction=request.instruction,
-        )
+
+        # Use the correct method based on query type
+        if request.is_query:
+            # For queries, use embed_query for each text
+            embeddings = []
+            for text in request.texts:
+                emb = embedding_service.embed_query(
+                    query=text, use_cache=False, task_instruction=request.instruction
+                )
+                embeddings.append(emb if emb else [])
+        else:
+            # For documents, use embed_batch_documents
+            embeddings = embedding_service.embed_batch_documents(
+                documents=request.texts, batch_size=32
+            )
 
         duration = time.time() - start_time
         model_inference_duration_seconds.labels(
@@ -91,11 +106,15 @@ async def rerank_endpoint(request: RerankRequest):
 
         # Delegate to reranker service (auto-routes to GPU or CPU)
         reranker_service = Qwen3RerankerService()
-        results = await reranker_service.rerank(
+
+        # Convert string documents to dicts as expected by service
+        doc_dicts = [{"content": d} for d in request.documents]
+
+        results, _ = reranker_service.rerank(
             query=request.query,
-            documents=request.documents,
+            documents=doc_dicts,
             top_n=request.top_n,
-            instruction=request.instruction,
+            task_instruction=request.instruction,
         )
 
         duration = time.time() - start_time
@@ -107,9 +126,14 @@ async def rerank_endpoint(request: RerankRequest):
             f"Reranked {len(request.documents)} documents → top {request.top_n} in {duration:.3f}s"
         )
 
+        # Extract scores and indices from results
+        # results is a list of dicts: {'index': i, 'relevance_score': s, 'document': d}
+        scores = [r["relevance_score"] for r in results]
+        indices = [r["index"] for r in results]
+
         return RerankResponse(
-            scores=results["scores"],
-            indices=results["indices"],
+            scores=scores,
+            indices=indices,
             model="Qwen/Qwen3-Reranker-0.6B",
             usage={
                 "total_documents": len(request.documents),
@@ -143,14 +167,16 @@ async def guard_endpoint(request: GuardRequest):
         guardrails_service = Qwen3GuardService()
 
         if request.check_type == "input":
-            result = await guardrails_service.validate_query(text=request.text)
+            is_safe, violation, metadata = guardrails_service.validate_query(
+                query=request.text
+            )
         elif request.check_type == "output":
             if not request.query:
                 raise HTTPException(
                     status_code=400,
                     detail="query is required for output safety check",
                 )
-            result = await guardrails_service.validate_response(
+            is_safe, violation, metadata = guardrails_service.validate_response(
                 query=request.query, response=request.text
             )
         else:
@@ -165,16 +191,16 @@ async def guard_endpoint(request: GuardRequest):
         ).observe(duration)
 
         logger.info(
-            f"Guardrails check ({request.check_type}): is_safe={result['is_safe']}, "
-            f"severity={result['severity']}, duration={duration:.3f}s"
+            f"Guardrails check ({request.check_type}): is_safe={is_safe}, "
+            f"severity={metadata.get('severity')}, duration={duration:.3f}s"
         )
 
         return GuardResponse(
-            is_safe=result["is_safe"],
-            severity=result["severity"],
-            categories=result["categories"],
-            is_refusal=result.get("is_refusal", False),
-            raw_output=result.get("raw_output", ""),
+            is_safe=is_safe,
+            severity=metadata.get("severity", "Unknown"),
+            categories=metadata.get("categories", []),
+            is_refusal=metadata.get("details", {}).get("is_refusal", False),
+            raw_output=metadata.get("details", {}).get("raw_output", ""),
             model="Qwen/Qwen3Guard-Gen-0.6B",
             usage={"duration_seconds": duration},
         )
