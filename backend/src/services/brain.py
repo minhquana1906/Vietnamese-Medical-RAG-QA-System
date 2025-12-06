@@ -7,8 +7,7 @@ from loguru import logger
 from openai import OpenAI
 
 from ..configs.setup import get_backend_settings
-from ..core.model_config import (get_generation_model, get_vllm_api_key,
-                                 get_vllm_url)
+from ..core.model_config import get_generation_model, get_vllm_api_key, get_vllm_url
 
 settings = get_backend_settings()
 
@@ -134,7 +133,7 @@ def detect_route(history, message):
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert in classifying user intents.",
+                "content": "You are an expert in classifying user intents into medical and general categories. Only return one of the two labels: 'medical' or 'general'. Do NOT provide any explanations.",
             },
             {"role": "user", "content": user_prompt},
         ]

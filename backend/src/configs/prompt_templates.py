@@ -75,14 +75,11 @@ Câu hỏi đã viết lại:"""
 # ================= Intent Classification =========================
 
 INTENT_DETECTION_PROMPT = """Phân loại intent của user vào 1 trong 2 nhóm:
-
 1. **medical**: Câu hỏi về bệnh, triệu chứng, điều trị, thuốc, liều lượng, thủ thuật y khoa, tư vấn sức khỏe
    Ví dụ: "Triệu chứng tiểu đường?", "Liều dùng paracetamol?"
-
 2. **general**: Câu hỏi không liên quan y tế (kiến thức phổ thông, định nghĩa, thông tin chung)
    Ví dụ: "Thủ đô Pháp?", "Multi-LoRA là gì?"
-
-Chỉ trả về label: "medical" hoặc "general"
+Chỉ trả về duy nhất 1 trong 2 label "medical" hoặc "general", TUYỆT ĐỐI KHÔNG ĐƯỢC giải thích giải thích gì thêm.
 
 Lịch sử:
 {history}

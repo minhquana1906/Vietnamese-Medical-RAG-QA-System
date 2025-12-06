@@ -11,8 +11,12 @@ from .configs.logging_config import get_rag_logger
 from .configs.setup import get_backend_settings
 from .core.guardrails import get_guardrails_service
 from .core.vectorize import search_vectors, upsert_points
-from .services.brain import (detect_route, enhance_query_quality,
-                             get_tavily_agent_answer, qwen3_chat_complete)
+from .services.brain import (
+    detect_route,
+    enhance_query_quality,
+    get_tavily_agent_answer,
+    qwen3_chat_complete,
+)
 from .services.chunking import fixed_semantic_chunking
 from .services.embedding import get_embedding_service
 from .services.rerank import get_qwen3_reranker
@@ -246,12 +250,12 @@ def bot_route_answer_message(history, question, system_prompt=None):
     route = detect_route(history, question)
     rag_log.log_route_detection(route)
 
-    if route == "medical":
+    if "medical" in route.lower():
         # Pass skip_input_validation=True since we already validated
         return rag_qa_task(
             history, question, system_prompt=system_prompt, skip_input_validation=True
         )
-    elif route == "general":
+    elif "general" in route.lower():
         response = qwen3_chat_complete(
             messages=[
                 {
@@ -421,8 +425,10 @@ def rag_qa_task(
         # ============================================
         # STEP 6: HISTORY SUMMARIZATION
         # ============================================
-        from .services.summarizer import (calculate_messages_tokens,
-                                          summarize_old_messages)
+        from .services.summarizer import (
+            calculate_messages_tokens,
+            summarize_old_messages,
+        )
 
         prompt = system_prompt or settings.system_prompt
         messages = [{"role": "system", "content": prompt}]
