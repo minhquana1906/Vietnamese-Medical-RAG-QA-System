@@ -1,13 +1,15 @@
-# Test Execution Guide (GPU + Small Samples)
+# Test Execution Guide (Unified)
 
-This guide describes how to run full GPU-enabled services and execute small, real end-to-end samples through the Chainlit app to validate all features: text RAG, audio pipeline, hybrid search, reranking, guardrails, caching, and monitoring.
+This single guide unifies service setup, integration testing, and load testing. It merges prior documents: tests README (integration-first) and Locust load testing instructions.
 
 ## Prerequisites
 
-- NVIDIA GPU with recent drivers and CUDA support (Docker Desktop GPU enabled or Linux host)
+- Real services up and reachable (PostgreSQL, Redis, Elasticsearch, Qdrant, vLLM/Qwen3, ElevenLabs)
+- NVIDIA GPU recommended for model services; CPU fallback supported
 - Docker Desktop (Windows) or Docker Engine (Linux) with Compose V2
 - Verified API keys: `HF_TOKEN`, `ELEVENLABS_API_KEY`, optionally `OPENAI_API_KEY`, `TAVILY_API_KEY`
-- `.env` file created from `.env.example`
+- `.env` created from `.env.example`
+- Python 3.12 with `uv` tool available
 
 ## Environment Configuration
 
@@ -41,7 +43,7 @@ Push-Location "serving/qwen3_models"; docker compose up -d; Pop-Location
 Push-Location "serving/vllm"; ./entrypoint.sh; Pop-Location
 ```
 
-Ports in use:
+Ports:
 - Backend API `8000`
 - Chainlit UI `8080`
 - PostgreSQL `5432`, Redis `6379`, Elasticsearch `9200`, Qdrant `6333`
@@ -65,13 +67,13 @@ Push-Location "backend"; uv run python scripts/load_dataset.py; Pop-Location
 ```
 
 Validate indexing:
-- Documents appear in Chainlit UI or via `/v1/documents` list
+- Documents appear in Chainlit UI or via `/v1/documents`
 - Chunks visible and searchable
 - Qdrant/Elasticsearch logs show inserts
 
 ## Text RAG Samples
 
-Use 3–5 Vietnamese medical queries in the Chainlit chat, e.g.:
+Try 3–5 Vietnamese medical queries in Chainlit, e.g.:
 - "Triệu chứng điển hình của viêm phổi là gì?"
 - "Thuốc hạ sốt nào an toàn cho trẻ em?"
 - "Khi nào cần xét nghiệm HbA1c cho bệnh nhân tiểu đường?"
@@ -83,50 +85,87 @@ Check:
 
 ## Hybrid Search Variants
 
-Run keyword-heavy vs semantic-heavy queries and confirm diverse top-K results via RRF fusion. Repeat a query to observe Redis cache hits in `/v1/cache/stats`.
+Run keyword-heavy vs semantic-heavy queries; confirm diverse top-K via RRF. Repeat a query to observe Redis cache hits in `/v1/cache/stats`.
 
 ## Reranking Checks
 
-- Ensure reranker is enabled in config
-- Compare responses with reranker off (temporary toggle if supported)
-- Call `/v1/models/rerank` with a query and candidate docs to inspect score distribution
+- Ensure reranker enabled in config
+- Compare responses with reranker off (if supported)
+- Call `/v1/models/rerank` to inspect score distribution
 
 ## Guardrails Tests
 
 Submit unsafe/borderline queries and verify behavior:
 - Violent/sexual/PII/jailbreak examples
-- Confirm block/warn/rewrite per threshold and categories returned by `/v1/models/guard`
+- Confirm block/warn/rewrite per `/v1/models/guard`
 
 ## Audio Pipeline (GPU STT + TTS)
 
-In Chainlit, record a short Vietnamese question and send.
+Record a short Vietnamese question in Chainlit.
 Validate:
 - STT transcript accuracy
-- Text answer produced via RAG
-- TTS playback works; audio file accessible via UI (cleanup of temp files)
+- Text RAG answer
+- TTS playback; audio file accessible in UI
 
 ## Observability Checks
 
-- Prometheus: `http://localhost:9090` — scrape targets include backend and GPU service
-- Grafana: `http://localhost:3000` — dashboards for model latency, cache, voice pipeline, GPU VRAM
-- Loki logs and Tempo traces if enabled
-
-## Minimal External Usage
-
-- Use one ElevenLabs TTS sample to confirm API key configured
-- Trigger one Tavily routing case (if enabled) and ensure graceful behavior
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Optional: Loki logs and Tempo traces
 
 ## Troubleshooting
 
-- If GPU services fail, verify Docker Desktop GPU support or run on Linux host
-- Switch to CPU fallback: set `QWEN3_MODELS_ENABLED=false` in `.env` and restart backend
-- Check environment variables and container logs for vLLM and GPU service readiness
+- If GPU services fail, verify Docker Desktop GPU support or use Linux
+- CPU fallback: set `QWEN3_MODELS_ENABLED=false` and restart backend
+- Check env variables and container logs for vLLM/GPU readiness
 
-## Next Steps
+---
 
-- Run performance tests via `testing/locustfile.py` after updating endpoints to `/v1/rag`
-- Expand dataset after stability confirmed
-// CI integration intentionally excluded from testing scope per requirements.
+## Tests Guide (Integration-first)
+
+This repository uses `pytest` with an integration-first approach: tests run in-process against the FastAPI app (`backend.src.main:app`) while pointing to real services.
+
+### Quick Run (PowerShell)
+```powershell
+# Run all integration tests
+uv run pytest tests/integration -v
+
+# With coverage for backend source
+uv run pytest tests/integration -v --cov=backend/src --cov-report=term-missing --cov-report=html
+
+# Open HTML coverage report
+Start-Process .\htmlcov\index.html
+```
+
+### Test Areas
+- Health & metrics: `tests/integration/test_health_ready_metrics.py`
+- RAG (text): `tests/integration/test_rag_endpoint.py`
+- Models API (embed/rerank/guard): `tests/integration/test_models_api.py`
+- Documents CRUD: `tests/integration/test_documents_crud.py`
+- Audio pipeline (STT, TTS, Audio RAG): `tests/integration/test_audio_pipeline.py`
+- Load testing (Locust): `tests/perf/locustfile.py`
+
+### Notes
+- Audio tests use `tests/sample_audio_vn.wav` (preferred) or repo root
+- `testing/` consolidated into `tests/`; use `tests/perf/` for Locust
+- Tests assume external dependencies are running; failures typically indicate readiness or credentials
+
+### Selective Runs
+```powershell
+uv run pytest tests/integration/test_models_api.py -v
+uv run pytest -k "rag and not audio" -v
+```
+
+### Tox
+```powershell
+uv run tox -e py312
+```
+Executes pytest with coverage as configured in `tox.ini`.
+
+### Troubleshooting
+- Verify `/v1/ready` and `/v1/health` return OK
+- Check `docker compose` logs for backend and GPU services
+- Ensure API keys (e.g., `ELEVENLABS_API_KEY`) are set for TTS and vLLM URLs
 
 ---
 
@@ -135,78 +174,90 @@ Validate:
 Use these PowerShell commands to validate core endpoints quickly.
 
 - `/v1/ready`:
-	```powershell
-	Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/ready
-	```
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/ready
+```
 - `/v1/health`:
-	```powershell
-	Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/health
-	```
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/health
+```
 - `/v1/cache/stats`:
-	```powershell
-	Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/cache/stats
-	```
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/cache/stats
+```
 - `/v1/rag` (text):
-	```powershell
-	$body = @{ query = "Triệu chứng điển hình của viêm phổi là gì?"; top_k = 5; return_sources = $true } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/rag
-	```
+```powershell
+$body = @{ query = "Triệu chứng điển hình của viêm phổi là gì?"; top_k = 5; return_sources = $true } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/rag
+```
 - `/v1/rag/audio` (audio file upload):
-	```powershell
-	$filePath = "sample_audio_vn.wav" # provide a short Vietnamese recording
-	$form = @{ file = Get-Item $filePath; top_k = 5; return_sources = "true" }
-	Invoke-WebRequest -UseBasicParsing -Method POST -Form $form http://localhost:8000/v1/rag/audio
-	```
+```powershell
+$filePath = "sample_audio_vn.wav" # provide a short Vietnamese recording
+$form = @{ file = Get-Item $filePath; top_k = 5; return_sources = "true" }
+Invoke-WebRequest -UseBasicParsing -Method POST -Form $form http://localhost:8000/v1/rag/audio
+```
 - `/v1/models/embed`:
-	```powershell
-	$body = @{ text = "viêm phổi" } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/embed
-	```
+```powershell
+$body = @{ text = "viêm phổi" } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/embed
+```
 - `/v1/models/rerank`:
-	```powershell
-	$body = @{ query = "viêm phổi"; documents = @("Triệu chứng gồm ho, sốt, khó thở", "Định nghĩa bệnh...", "Điều trị bằng kháng sinh") } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/rerank
-	```
+```powershell
+$body = @{ query = "viêm phổi"; documents = @("Triệu chứng gồm ho, sốt, khó thở", "Định nghĩa bệnh...", "Điều trị bằng kháng sinh") } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/rerank
+```
 - `/v1/models/guard`:
-	```powershell
-	$body = @{ text = "Cách chế tạo chất nổ?" } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/guard
-	```
+```powershell
+$body = @{ text = "Cách chế tạo chất nổ?" } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/guard
+```
 - `/v1/models/stt`:
-	```powershell
-	$filePath = "sample_audio_vn.wav"
-	$form = @{ file = Get-Item $filePath }
-	Invoke-WebRequest -UseBasicParsing -Method POST -Form $form http://localhost:8000/v1/models/stt
-	```
+```powershell
+$filePath = "sample_audio_vn.wav"
+$form = @{ file = Get-Item $filePath }
+Invoke-WebRequest -UseBasicParsing -Method POST -Form $form http://localhost:8000/v1/models/stt
+```
 - `/v1/models/tts`:
-	```powershell
-	$body = @{ text = "Xin chào, đây là kiểm thử TTS." } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/tts -OutFile tts_sample.mp3
-	```
+```powershell
+$body = @{ text = "Xin chào, đây là kiểm thử TTS." } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/models/tts -OutFile tts_sample.mp3
+```
 - `/v1/documents` list/create/get/delete:
-	```powershell
-	# List
-	Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/documents
+```powershell
+# List
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/documents
 
-	# Create
-	$body = @{ title = "Hướng dẫn viêm phổi"; content = "Viêm phổi là nhiễm trùng nhu mô phổi..." } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/documents
+# Create
+$body = @{ title = "Hướng dẫn viêm phổi"; content = "Viêm phổi là nhiễm trùng nhu mô phổi..." } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/documents
 
-	# Get (replace {id})
-	Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/documents/1
+# Get (replace {id})
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/documents/1
 
-	# Delete
-	Invoke-WebRequest -UseBasicParsing -Method DELETE http://localhost:8000/v1/documents/1
-	```
+# Delete
+Invoke-WebRequest -UseBasicParsing -Method DELETE http://localhost:8000/v1/documents/1
+```
 - Indexing dataset and job status:
-	```powershell
-	# Ingest dataset from HuggingFace
-	$body = @{ dataset = "quannguyen204/vietnamese_medical_corpus_dataset"; limit = 50 } | ConvertTo-Json
-	Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/indexing/ingest-dataset
+```powershell
+# Ingest dataset from HuggingFace
+$body = @{ dataset = "quannguyen204/vietnamese_medical_corpus_dataset"; limit = 50 } | ConvertTo-Json
+Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/json" -Body $body http://localhost:8000/v1/indexing/ingest-dataset
 
-	# Job status (replace {id} if returned)
-	Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/indexing/jobs/1
-	```
+# Job status (replace {id} if returned)
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/indexing/jobs/1
+```
+
+---
+
+## Load Testing (Locust)
+
+Run Locust against the backend API using the perf profile in `tests/perf/locustfile.py`.
+
+```powershell
+Push-Location tests\perf; locust; Pop-Location
+```
+
+Adjust host to your backend (default Chainlit proxy or direct API). Observe Grafana dashboards for latency and GPU VRAM during load.
 
 ---
 
@@ -335,10 +386,10 @@ Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/cache/stats
 
 Goals: measure P50/P95/P99 latency and throughput; GPU memory.
 
-1) Update `testing/locustfile.py` to hit `/v1/rag` and add an audio scenario.
+1) Ensure `tests/perf/locustfile.py` hits `/v1/rag` and includes audio scenario if needed.
 2) Run Locust against the backend service.
 ```powershell
-Push-Location "testing"; locust; Pop-Location
+Push-Location tests\perf; locust; Pop-Location
 ```
 
 Observe Grafana dashboards for latency and GPU VRAM usage during load.
@@ -350,7 +401,7 @@ Observe Grafana dashboards for latency and GPU VRAM usage during load.
 Goals: verify graceful degradation and recovery under outages.
 
 - Stop Redis: repeat `/v1/rag` and confirm fallback/clear errors, then restart Redis and retest.
-- Stop Elasticsearch/Qdrant: verify partial results or error surfaced appropriately.
+- Stop Elasticsearch/Qdrant: verify partial results or appropriate error.
 - Stop vLLM/GPU/TTS services: confirm timeouts or degraded paths; monitor recovery after restart.
 
 ---
