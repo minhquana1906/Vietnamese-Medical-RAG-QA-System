@@ -8,19 +8,22 @@ class RAGUser(HttpUser):
 
     wait_time = between(1, 3)  # Wait 1-3 seconds between requests
 
-    # Sample medical queries in Vietnamese
-    simple_queries = [
-        "Triệu chứng của bệnh tiểu đường là gì?",
-        "Cách điều trị cao huyết áp",
-        "Thuốc paracetamol dùng như thế nào?",
-        "Bệnh viêm gan B lây qua đường nào?",
-        "Dấu hiệu nhận biết bệnh sốt xuất huyết",
-        "Cách phòng ngừa bệnh COVID-19",
-        "Thuốc kháng sinh amoxicillin có tác dụng phụ gì?",
-        "Vitamin C có tác dụng gì với cơ thể?",
-        "Bệnh tiểu đường type 2 có chữa khỏi được không?",
-        "Dấu hiệu của bệnh ung thư phổi",
+    SAMPLE_QUERIES = [
+        "Triệu chứng điển hình của viêm phổi là gì?",
+        "Thuốc hạ sốt nào an toàn cho trẻ em?",
+        "Khi nào cần xét nghiệm HbA1c cho bệnh nhân tiểu đường?",
+        "Phân biệt cảm cúm và cúm mùa như thế nào?",
     ]
+
+    @task(5)
+    def rag_text(self):
+        query = random.choice(self.SAMPLE_QUERIES)
+        body = {"query": query, "top_k": 5, "return_sources": True}
+        self.client.post("/v1/rag", json=body, name="rag_text")
+
+    @task(1)
+    def health(self):
+        self.client.get("/v1/health", name="health")
 
     complex_queries = [
         "Tôi bị đau đầu và sốt, nên uống thuốc gì và liều lượng ra sao?",
@@ -108,3 +111,18 @@ class SpikeTestUser(HttpUser):
             },
             name="/chat/complete (spike)",
         )
+
+class AudioUser(HttpUser):
+    wait_time = between(2.0, 4.0)
+
+    @task
+    def rag_audio(self):
+        # Expect a small Vietnamese WAV file present at testing/sample_audio_vn.wav
+        try:
+            with open("testing/sample_audio_vn.wav", "rb") as f:
+                files = {"file": ("sample_audio_vn.wav", f, "audio/wav")}
+                data = {"top_k": 5, "return_sources": "true"}
+                self.client.post("/v1/rag/audio", files=files, data=data, name="rag_audio")
+        except FileNotFoundError:
+            # Fallback: hit STT endpoint without file to surface error handling
+            self.client.post("/v1/models/stt", name="stt_no_file")
